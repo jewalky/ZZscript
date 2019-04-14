@@ -93,6 +93,7 @@ struct ZField : public ZTreeNode
     QList<QString> flags;
     QString version;
     QString deprecated;
+    int lineNumber;
 };
 
 struct ZConstant : public ZTreeNode
@@ -101,6 +102,7 @@ struct ZConstant : public ZTreeNode
     virtual NodeType type() { return Constant; }
 
     // children = expression
+    int lineNumber;
 };
 
 struct ZProperty : public ZTreeNode
@@ -111,6 +113,7 @@ struct ZProperty : public ZTreeNode
     // identifier = prop name
     // property <name> : <field1> [, <field2> ... ]
     QList<QString> fields;
+    int lineNumber;
 };
 
 struct ZMethod : public ZTreeNode
@@ -139,6 +142,7 @@ struct ZMethod : public ZTreeNode
     QString version;
     QString deprecated;
     bool hasEllipsis;
+    int lineNumber;
 
     // children = parsed method statements (expressions, etc)
     // tokens = after parseObjectFields, but before parseObjectMethods
@@ -155,6 +159,7 @@ struct ZStruct : public ZTreeNode
     QList<QString> flags;
     // after parseRoot, but before parseObjectFields
     QList<Tokenizer::Token> tokens;
+    int lineNumber;
 
     // children = ZField, ZConstant, ZProperty.. (for classes)
 };
@@ -284,6 +289,7 @@ struct ZEnum : public ZTreeNode
 
     QString version;
     QList< QPair<QString, ZExpression*> > values;
+    int lineNumber;
 };
 
 struct ParserToken

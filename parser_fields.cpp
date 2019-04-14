@@ -27,6 +27,7 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
 
         stream.peekToken(token);
         token.makeLower();
+        int lineno = token.line;
 
         if (token.value == "enum")
         {
@@ -37,6 +38,7 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
                 return false;
             }
             enm->parent = struc;
+            enm->lineNumber = lineno;
             struc->children.append(enm);
             continue;
         }
@@ -76,6 +78,7 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
             konst->identifier = c_identifier;
             c_expression->parent = konst;
             konst->children.append(c_expression);
+            konst->lineNumber = lineno;
             konst->isValid = true;
             struc->children.append(konst);
             continue;
@@ -122,6 +125,7 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
             ZProperty* prop = new ZProperty(struc);
             prop->identifier = prop_identifier;
             prop->fields = prop_fields;
+            prop->lineNumber = lineno;
             prop->isValid = true;
             struc->children.append(prop);
             continue;
@@ -278,6 +282,7 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
             field->fieldType = fieldTypes[0];
             field->version = f_version;
             field->deprecated = f_deprecated;
+            field->lineNumber = lineno;
             field->isValid = true;
             struc->children.append(field);
         }
@@ -429,6 +434,7 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
             method->arguments = args;
             method->hasEllipsis = hadellipsis;
             method->tokens = body;
+            method->lineNumber = lineno;
             method->isValid = true;
             // for destructor to work
             for (auto& arg : args)
