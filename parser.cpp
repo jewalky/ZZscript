@@ -29,8 +29,7 @@ bool Parser::parse()
         Tokenizer::Token& tok = tokens[i];
         if (tok.type != Tokenizer::LineComment && tok.type != Tokenizer::BlockComment)
             continue;
-        ParserToken ptok = tok;
-        ptok.type = ParserToken::Comment;
+        ParserToken ptok(tok, ParserToken::Comment);
         parsedTokens.append(ptok);
         tokens.removeAt(i);
         i--;

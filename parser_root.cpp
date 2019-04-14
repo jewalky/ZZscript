@@ -67,6 +67,7 @@ bool Parser::parseRoot(TokenStream& stream)
         {
             if (token.value == "class" || token.value == "extend")
             {
+                parsedTokens.append(ParserToken(token, ParserToken::Keyword));
                 bool isExtend = token.value == "extend";
                 if (isExtend)
                 {
@@ -83,6 +84,7 @@ bool Parser::parseRoot(TokenStream& stream)
                         qDebug("unexpected '%s' at line %d, expected 'extend class'", token.toCString(), token.line);
                         return false;
                     }
+                    parsedTokens.append(ParserToken(token, ParserToken::Keyword));
                 }
                 ZClass* cls = parseClass(stream, isExtend);
                 if (!cls)
@@ -92,6 +94,7 @@ bool Parser::parseRoot(TokenStream& stream)
             }
             else if (token.value == "struct")
             {
+                parsedTokens.append(ParserToken(token, ParserToken::Keyword));
                 ZStruct* struc = parseStruct(stream);
                 if (!struc)
                     return false;
@@ -100,6 +103,7 @@ bool Parser::parseRoot(TokenStream& stream)
             }
             else if (token.value == "enum")
             {
+                parsedTokens.append(ParserToken(token, ParserToken::Keyword));
                 ZEnum* enm = parseEnum(stream);
                 if (!enm)
                     return false;
@@ -140,6 +144,7 @@ ZClass* Parser::parseClass(TokenStream& stream, bool extend)
     }
     c_className = token.value;
     if (extend) c_extendName = c_className;
+    parsedTokens.append(ParserToken(token, ParserToken::TypeName));
 
     skipWhitespace(stream, true);
     if (!stream.expectToken(token, Tokenizer::Colon|Tokenizer::OpenCurly|Tokenizer::Identifier))
@@ -150,6 +155,7 @@ ZClass* Parser::parseClass(TokenStream& stream, bool extend)
 
     if (token.type == Tokenizer::Colon)
     {
+        parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
         skipWhitespace(stream, true);
         if (!stream.expectToken(token, Tokenizer::Identifier))
         {
@@ -157,6 +163,7 @@ ZClass* Parser::parseClass(TokenStream& stream, bool extend)
             return nullptr;
         }
         c_parentName = token.value;
+        parsedTokens.append(ParserToken(token, ParserToken::TypeName));
 
         skipWhitespace(stream, true);
         if (!stream.expectToken(token, Tokenizer::OpenCurly|Tokenizer::Identifier))
@@ -168,6 +175,7 @@ ZClass* Parser::parseClass(TokenStream& stream, bool extend)
 
     if (token.type == Tokenizer::Identifier && token.value == "replaces")
     {
+        parsedTokens.append(ParserToken(token, ParserToken::Keyword));
         skipWhitespace(stream, true);
         if (!stream.expectToken(token, Tokenizer::Identifier))
         {
@@ -175,6 +183,7 @@ ZClass* Parser::parseClass(TokenStream& stream, bool extend)
             return nullptr;
         }
         c_replaceName = token.value;
+        parsedTokens.append(ParserToken(token, ParserToken::TypeName));
 
         skipWhitespace(stream, true);
         if (!stream.expectToken(token, Tokenizer::OpenCurly|Tokenizer::Identifier))
@@ -186,6 +195,7 @@ ZClass* Parser::parseClass(TokenStream& stream, bool extend)
 
     if (token.type == Tokenizer::Identifier)
     {
+        parsedTokens.append(ParserToken(token, ParserToken::Keyword));
         // start of flags
         while (true)
         {
@@ -198,6 +208,7 @@ ZClass* Parser::parseClass(TokenStream& stream, bool extend)
                     qDebug("parseClass: unexpected %s at line %d, expected %s(\"string\")", token.toCString(), token.line, tt.toUtf8().data());
                     return nullptr;
                 }
+                parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
 
                 skipWhitespace(stream, true);
                 if (!stream.expectToken(token, Tokenizer::String))
@@ -208,6 +219,7 @@ ZClass* Parser::parseClass(TokenStream& stream, bool extend)
                 if (token.value == "version")
                     c_version = token.value;
                 else c_deprecated = token.value;
+                parsedTokens.append(ParserToken(token, ParserToken::String));
 
                 skipWhitespace(stream, true);
                 if (!stream.expectToken(token, Tokenizer::CloseParen))
@@ -215,6 +227,7 @@ ZClass* Parser::parseClass(TokenStream& stream, bool extend)
                     qDebug("parseClass: unexpected %s at line %d, expected %s(\"string\")", token.toCString(), token.line, tt.toUtf8().data());
                     return nullptr;
                 }
+                parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
             }
             else
             {
@@ -235,6 +248,7 @@ ZClass* Parser::parseClass(TokenStream& stream, bool extend)
 
     if (token.type == Tokenizer::OpenCurly)
     {
+        parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
         // rewind one token back
         QList<Tokenizer::Token> classTokens;
         if (!consumeTokens(stream, classTokens, Tokenizer::CloseCurly) || !stream.expectToken(token, Tokenizer::CloseCurly))
@@ -248,6 +262,7 @@ ZClass* Parser::parseClass(TokenStream& stream, bool extend)
             qDebug("parseClass: unexpected end of input while parsing class body; check curly braces");
             return nullptr;
         }
+        parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
 
         ZClass* cls = new ZClass(nullptr);
         cls->flags = c_flags;
@@ -287,6 +302,7 @@ ZStruct* Parser::parseStruct(TokenStream& stream)
         return nullptr;
     }
     s_structName = token.value;
+    parsedTokens.append(ParserToken(token, ParserToken::TypeName));
 
     skipWhitespace(stream, true);
     if (!stream.expectToken(token, Tokenizer::OpenCurly|Tokenizer::Identifier))
@@ -297,6 +313,7 @@ ZStruct* Parser::parseStruct(TokenStream& stream)
 
     if (token.type == Tokenizer::Identifier)
     {
+        parsedTokens.append(ParserToken(token, ParserToken::Keyword));
         // start of flags
         while (true)
         {
@@ -309,6 +326,7 @@ ZStruct* Parser::parseStruct(TokenStream& stream)
                     qDebug("parseStruct: unexpected %s at line %d, expected %s(\"string\")", token.toCString(), token.line, tt.toUtf8().data());
                     return nullptr;
                 }
+                parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
 
                 skipWhitespace(stream, true);
                 if (!stream.expectToken(token, Tokenizer::String))
@@ -319,6 +337,7 @@ ZStruct* Parser::parseStruct(TokenStream& stream)
                 if (token.value == "version")
                     s_version = token.value;
                 else s_deprecated = token.value;
+                parsedTokens.append(ParserToken(token, ParserToken::String));
 
                 skipWhitespace(stream, true);
                 if (!stream.expectToken(token, Tokenizer::CloseParen))
@@ -326,6 +345,7 @@ ZStruct* Parser::parseStruct(TokenStream& stream)
                     qDebug("parseStruct: unexpected %s at line %d, expected %s(\"string\")", token.toCString(), token.line, tt.toUtf8().data());
                     return nullptr;
                 }
+                parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
             }
             else
             {
@@ -346,6 +366,7 @@ ZStruct* Parser::parseStruct(TokenStream& stream)
 
     if (token.type == Tokenizer::OpenCurly)
     {
+        parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
         // rewind one token back
         QList<Tokenizer::Token> classTokens;
         if (!consumeTokens(stream, classTokens, Tokenizer::CloseCurly) || !stream.expectToken(token, Tokenizer::CloseCurly))
@@ -359,6 +380,7 @@ ZStruct* Parser::parseStruct(TokenStream& stream)
             qDebug("parseStruct: unexpected end of input while parsing class body; check curly braces");
             return nullptr;
         }
+        parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
 
         ZStruct* struc = new ZStruct(nullptr);
         struc->flags = s_flags;
@@ -397,6 +419,7 @@ ZEnum* Parser::parseEnum(TokenStream& stream)
         return nullptr;
     }
     e_enumName = token.value;
+    parsedTokens.append(ParserToken(token, ParserToken::TypeName));
 
     skipWhitespace(stream, true);
     if (!stream.expectToken(token, Tokenizer::OpenCurly))
@@ -404,6 +427,7 @@ ZEnum* Parser::parseEnum(TokenStream& stream)
         qDebug("parseEnum: unexpected %s, expected enum body at line %d", token.toCString(), token.line);
         return nullptr;
     }
+    parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
 
     while (true)
     {
@@ -421,6 +445,7 @@ ZEnum* Parser::parseEnum(TokenStream& stream)
             break;
 
         QString enum_id = token.value;
+        parsedTokens.append(ParserToken(token, ParserToken::ConstantName));
         skipWhitespace(stream, true);
         if (!stream.expectToken(token, Tokenizer::Comma|Tokenizer::OpAssign|Tokenizer::CloseCurly))
         {
@@ -433,6 +458,7 @@ ZEnum* Parser::parseEnum(TokenStream& stream)
         if (token.type == Tokenizer::CloseCurly)
             break; // done, valid enum
 
+        parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
         if (token.type == Tokenizer::OpAssign)
         {
             skipWhitespace(stream, true);
@@ -458,14 +484,18 @@ ZEnum* Parser::parseEnum(TokenStream& stream)
 
             if (token.type == Tokenizer::CloseCurly)
                 break;
+
+            parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
         }
     }
 
+    parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
     // enum can also optionally end with a semicolon - if ported from C++
     int cpos = stream.position();
     skipWhitespace(stream, true);
     if (!stream.expectToken(token, Tokenizer::Semicolon))
         stream.setPosition(cpos);
+    else parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
 
     ZEnum* enm = new ZEnum(nullptr);
     enm->identifier = e_enumName;

@@ -300,13 +300,7 @@ struct ParserToken
     {
         startsAt = endsAt = 0;
         type = Text;
-    }
-
-    ParserToken(Tokenizer::Token tok)
-    {
-        token = tok;
-        startsAt = token.startsAt;
-        endsAt = token.endsAt;
+        reference = nullptr;
     }
 
     enum TokenType
@@ -329,9 +323,19 @@ struct ParserToken
         SpecialToken
     };
 
+    ParserToken(Tokenizer::Token tok, TokenType type, ZTreeNode* ref = nullptr)
+    {
+        token = tok;
+        startsAt = token.startsAt;
+        endsAt = token.endsAt;
+        this->type = type;
+        reference = ref;
+    }
+
     int startsAt;
     int endsAt;
     TokenType type;
+    ZTreeNode* reference;
 };
 
 class Parser
