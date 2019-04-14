@@ -35,8 +35,8 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
             {
                 return false;
             }
-            enm->parent = cls;
-            cls->children.append(enm);
+            enm->parent = struc;
+            struc->children.append(enm);
             continue;
         }
 

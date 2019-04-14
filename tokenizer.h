@@ -62,7 +62,7 @@ public:
     void setPosition(int pos);
     int position();
     int lastPosition() { return lastPos; }
-    int line() { return curLine; }
+    int line();
 
     QList<Token> readAllTokens();
 
@@ -86,11 +86,38 @@ private:
     bool tryReadNamedToken(Token& out);
 
     QString data;
-    QTextStream stream;
+    int dataPos;
+    QList<int> dataLineNumbers;
 
     int lastPos;
-    int curLine;
     int maxLine;
+
+    inline QChar readChar()
+    {
+        if (dataPos >= data.length() || dataPos < 0)
+            return 0;
+        QChar o = data[dataPos];
+        dataPos++;
+        return o;
+    }
+
+    inline QStringRef readString(int len)
+    {
+        int start = dataPos;
+        int end = len;
+        if (start > data.length())
+            start = dataPos;
+        if (start+len > data.length())
+            end = data.length()-dataPos;
+        if (start < 0)
+        {
+            len += start;
+            start = 0;
+        }
+        if (len < 0)
+            len = 0;
+        return QStringRef(&data, start, end);
+    }
 };
 
 class TokenStream

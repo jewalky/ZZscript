@@ -29,7 +29,7 @@ void Document::parse()
     parsedTokens = p.parsedTokens;
 }
 
-DocumentEditor::DocumentEditor(QWidget* parent) : QTextEdit(parent)
+DocumentEditor::DocumentEditor(QWidget* parent) : QPlainTextEdit(parent)
 {
     // link various events
     // for now, any text change should cause reparse
@@ -45,7 +45,7 @@ void DocumentEditor::onTextChanged()
     if (processing)
         return;
 
-    setFontFamily("Courier");
+    //setFontFamily("Courier");
 
     QString newText = toPlainText();
     DocumentTab* tab = qobject_cast<DocumentTab*>(parentWidget());
@@ -53,10 +53,12 @@ void DocumentEditor::onTextChanged()
     Document* doc = tab->document();
     assert(doc != nullptr);
     doc->contents = newText;
+    QTime elTimer;
+    elTimer.start();
     doc->parse();
+    qDebug("parsing done in %d ms", elTimer.elapsed());
 
     this->setUpdatesEnabled(false);
-
     processing = true;
     QTextCursor tcur = this->textCursor();
     tcur.beginEditBlock();

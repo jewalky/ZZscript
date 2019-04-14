@@ -1,5 +1,7 @@
 #include "tokenizer.h"
 
+#include <QTime>
+
 QList<Tokenizer::TokenInfo> Tokenizer::TokenInfos;
 QMap<int, Tokenizer::TokenInfo*> Tokenizer::TokenInfosByNum;
 
@@ -10,8 +12,6 @@ bool Tokenizer::compareTokenLength(const Tokenizer::TokenInfo& a, const Tokenize
 
 Tokenizer::Tokenizer(QString input) : data(input)
 {
-    stream.setString(&data);
-
     if (!TokenInfos.size())
     {
         // initialize the list.
@@ -30,14 +30,20 @@ Tokenizer::Tokenizer(QString input) : data(input)
         }
     }
 
+    dataPos = 0;
     lastPos = 0;
-    curLine = 1;
     maxLine = 1;
+    int cLinePos = 0;
     for (QChar c : input)
     {
         if (c == '\n')
+        {
+            dataLineNumbers.append(cLinePos); // line #N ends at #idx (inclusively)
             maxLine++;
+        }
+        cLinePos++;
     }
+    maxLine = dataLineNumbers.size();
 }
 
 QString Tokenizer::tokenToString(quint64 token)
@@ -73,45 +79,30 @@ int Tokenizer::length()
 
 void Tokenizer::setPosition(int pos)
 {
-    stream.seek(pos);
-    // find line number
-    // remember that our stream is a string. cheap iteration works
-    curLine = 1;
-    int xpos = 0;
-    for (QChar c : *stream.string())
-    {
-        if (c == '\n')
-            curLine++;
-        xpos++;
-        if (xpos >= pos)
-            break;
-    }
+    dataPos = pos;
+    if (dataPos > data.size())
+        dataPos = data.size();
 }
 
 int Tokenizer::position()
 {
-    return int(stream.pos());
+    return dataPos;
 }
 
 bool Tokenizer::tryReadWhitespace(Tokenizer::Token& out)
 {
     int cpos = lastPos = position();
-    QChar c;
-    stream >> c;
+    QChar c = readChar();
 
-    QString whitespace = " \r\t\u00A0";
     QString outv = "";
 
-    if (whitespace.contains(c))
+    if (c == ' ' || c == '\r' || c == '\t' || c == 0xA0)
     {
-        if (c == '\n')
-            curLine++;
-
         outv += c;
         while (true)
         {
-            stream >> c;
-            if (whitespace.contains(c))
+            c = readChar();
+            if (c == ' ' || c == '\r' || c == '\t' || c == 0xA0)
             {
                 outv += c;
                 continue;
@@ -138,8 +129,7 @@ bool Tokenizer::tryReadWhitespace(Tokenizer::Token& out)
 bool Tokenizer::tryReadIdentifier(Tokenizer::Token& out)
 {
     int cpos = lastPos = position();
-    QChar c;
-    stream >> c;
+    QChar c = readChar();
 
     if (c.isNull())
         return false;
@@ -153,7 +143,7 @@ bool Tokenizer::tryReadIdentifier(Tokenizer::Token& out)
         outv += c;
         while (true)
         {
-            stream >> c;
+            c = readChar();
 
             if (c.isNull())
                 break;
@@ -186,8 +176,7 @@ bool Tokenizer::tryReadIdentifier(Tokenizer::Token& out)
 bool Tokenizer::tryReadNumber(Tokenizer::Token& out)
 {
     int cpos = lastPos = position();
-    QChar c;
-    stream >> c;
+    QChar c = readChar();
 
     if (c.isNull())
         return false;
@@ -217,7 +206,7 @@ bool Tokenizer::tryReadNumber(Tokenizer::Token& out)
         isdouble = true;
         dotisvalid = false;
         outv += c;
-        stream >> c;
+        c = readChar();
         if (c.isNull())
             return false;
     }
@@ -234,8 +223,7 @@ bool Tokenizer::tryReadNumber(Tokenizer::Token& out)
         // peek in front for hex
         if (c == '0')
         {
-            QChar _c;
-            stream >> _c;
+            QChar _c = readChar();
             if (_c == 'x' || _c == 'X') // is uppercase allowed?
             {
                 ishex = true;
@@ -250,7 +238,7 @@ bool Tokenizer::tryReadNumber(Tokenizer::Token& out)
         //
         while (true)
         {
-            stream >> c;
+            c = readChar();
             if ((c >= '0' && c <= '9') ||
                 (!isexponent && ishex && ((c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))))
             {
@@ -263,8 +251,7 @@ bool Tokenizer::tryReadNumber(Tokenizer::Token& out)
                 isdouble = true;
                 outv += c;
                 // check for negative exponent
-                QChar _c;
-                stream >> _c;
+                QChar _c = readChar();
                 if (_c == '-')
                     outv += _c;
                 else if (!_c.isNull())
@@ -324,8 +311,7 @@ bool Tokenizer::tryReadNumber(Tokenizer::Token& out)
 bool Tokenizer::tryReadStringOrComment(Token& out, bool allowstring, bool allowname, bool allowblock, bool allowline)
 {
     int cpos = lastPos = position();
-    QChar c;
-    stream >> c;
+    QChar c = readChar();
 
     QString outv;
 
@@ -334,15 +320,14 @@ bool Tokenizer::tryReadStringOrComment(Token& out, bool allowstring, bool allown
         case '/': // comment
         {
             if (!allowblock && !allowline) break;
-            QChar cnext;
-            stream >> cnext;
+            QChar cnext = readChar();
             if (cnext == '/')
             {
                 if (!allowline) break;
                 // line comment: read until newline but not including it
                 while (true)
                 {
-                    stream >> c;
+                    c = readChar();
                     if (c.isNull())
                         break;
                     if (c == '\n')
@@ -367,15 +352,12 @@ bool Tokenizer::tryReadStringOrComment(Token& out, bool allowstring, bool allown
                 // block comment: read until closing sequence
                 while (true)
                 {
-                    stream >> c;
+                    c = readChar();
                     if (c == '*' || c.isNull())
                     {
                         if (c.isNull())
                             break;
-                        if (c == '\n')
-                            curLine++;
-                        QChar cnext;
-                        stream >> cnext;
+                        QChar cnext = readChar();
                         if (cnext == '/' || cnext.isNull())
                             break;
                         setPosition(position()-1);
@@ -402,11 +384,11 @@ bool Tokenizer::tryReadStringOrComment(Token& out, bool allowstring, bool allown
             while (true)
             {
                 // todo: parse escape sequences properly
-                stream >> c;
+                c = readChar();
                 if (c == '\\') // escape sequence. right now, do nothing
                 {
                     outv += c; // include the "\"
-                    stream >> c;
+                    c = readChar();
                     if (!c.isNull())
                         outv += c;
                 }
@@ -422,8 +404,6 @@ bool Tokenizer::tryReadStringOrComment(Token& out, bool allowstring, bool allown
                     return true;
                 }
                 else outv += c;
-                if (c == '\n')
-                    curLine++;
             }
         }
 
@@ -439,7 +419,7 @@ bool Tokenizer::tryReadNamedToken(Token& out)
 {
     int cpos = lastPos = position();
     int largestLen = TokenInfos[0].content.length();
-    QString stok = stream.read(largestLen).toLower();
+    QString stok = readString(largestLen).toString().toLower();
     for (QList<TokenInfo>::iterator it = TokenInfos.begin(); it != TokenInfos.end(); ++it)
     {
         const TokenInfo& info = (*it);
@@ -447,8 +427,6 @@ bool Tokenizer::tryReadNamedToken(Token& out)
             break;
         if (stok.startsWith(info.content.toLower()))
         {
-            if (info.number == int(Tokenizer::Newline))
-                curLine++;
             out.type = TokenType(1ull << info.number);
             out.startsAt = cpos;
             out.value = info.content;
@@ -492,7 +470,7 @@ bool Tokenizer::expectToken(Token& out, quint64 oneOf)
     }
 
     int largestLen = TokenInfos[0].content.length();
-    QString stok = stream.read(largestLen).toLower();
+    QString stok = readString(largestLen).toString().toLower();
     for (QList<TokenInfo>::iterator it = TokenInfos.begin(); it != TokenInfos.end(); ++it)
     {
         const TokenInfo& info = (*it);
@@ -519,7 +497,7 @@ bool Tokenizer::expectToken(Token& out, quint64 oneOf)
 
 bool Tokenizer::readToken(Token& out, bool shortCircuit)
 {
-    if (stream.atEnd())
+    if (dataPos >= data.length())
         return false;
 
     if (tryReadWhitespace(out))
@@ -543,7 +521,7 @@ bool Tokenizer::readToken(Token& out, bool shortCircuit)
     }
 
     out.type = Invalid;
-    out.value = stream.read(1);
+    out.value = readChar();
     out.startsAt = position()-1;
     out.endsAt = out.startsAt+1;
     out.line = line();;
@@ -558,6 +536,18 @@ QList<Tokenizer::Token> Tokenizer::readAllTokens()
     while (readToken(tok))
         tokens.append(tok);
     return tokens;
+}
+
+int Tokenizer::line()
+{
+    int lineNo = 0;
+    for (int& lineidx : dataLineNumbers)
+    {
+        lineNo++;
+        if (lineidx > dataPos)
+            break;
+    }
+    return lineNo;
 }
 
 TokenStream::TokenStream(QList<Tokenizer::Token>& toklst) : _tokens(toklst)

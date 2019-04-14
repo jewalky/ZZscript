@@ -461,6 +461,12 @@ ZEnum* Parser::parseEnum(TokenStream& stream)
         }
     }
 
+    // enum can also optionally end with a semicolon - if ported from C++
+    int cpos = stream.position();
+    skipWhitespace(stream, true);
+    if (!stream.expectToken(token, Tokenizer::Semicolon))
+        stream.setPosition(cpos);
+
     ZEnum* enm = new ZEnum(nullptr);
     enm->identifier = e_enumName;
     enm->values = e_values;

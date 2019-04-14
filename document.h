@@ -3,7 +3,7 @@
 
 #include <QString>
 #include <QWidget>
-#include <QTextEdit>
+#include <QPlainTextEdit>
 #include <QContextMenuEvent>
 #include "tokenizer.h"
 #include "parser.h"
@@ -46,7 +46,7 @@ private:
     Document* doc;
 };
 
-class DocumentEditor : public QTextEdit
+class DocumentEditor : public QPlainTextEdit
 {
     Q_OBJECT
 
