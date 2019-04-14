@@ -24,6 +24,22 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
         QList<QString> allowedKeywords = QList<QString>()<<"deprecated"<<"internal"<<"latent"<<"meta"<<"native"<<"play"<<"private"
                                                         <<"protected"<<"readonly"<<"transient"<<"ui"<<"version"<<"virtual"<<"override"
                                                        <<"virtualscope"<<"vararg"<<"final"<<"clearscope"<<"action";
+
+        stream.peekToken(token);
+
+        if (token.value == "enum")
+        {
+            stream.setPosition(stream.position()+1);
+            ZEnum* enm = parseEnum(stream);
+            if (!enm)
+            {
+                return false;
+            }
+            enm->parent = cls;
+            cls->children.append(enm);
+            continue;
+        }
+
         //  <allowedKeywords...> <type> ...
         bool nothingread = true;
         while (true)

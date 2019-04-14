@@ -55,6 +55,8 @@ void DocumentEditor::onTextChanged()
     doc->contents = newText;
     doc->parse();
 
+    this->setUpdatesEnabled(false);
+
     processing = true;
     QTextCursor tcur = this->textCursor();
     tcur.beginEditBlock();
@@ -226,6 +228,7 @@ void DocumentEditor::onTextChanged()
         }
     }
     tcur.endEditBlock();
+    this->setUpdatesEnabled(true);
     processing = false;
 }
 
