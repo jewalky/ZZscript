@@ -51,6 +51,11 @@ public:
         {
             return toString().toUtf8().data();
         }
+
+        void makeLower()
+        {
+            value = value.toLower();
+        }
     };
 
     //

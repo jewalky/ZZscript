@@ -21,7 +21,8 @@ struct ZTreeNode
         ForCycle,
         WhileCycle,
         Condition,
-        Constant
+        Constant,
+        Property
     };
 
     ZTreeNode* parent;
@@ -59,13 +60,23 @@ struct ZInclude : public ZTreeNode
     ZFileRoot* reference;
 };
 
+struct ZExpression;
 struct ZStruct;
 struct ZCompoundType
 {
     QString type;
     ZStruct* reference;
     QList<ZCompoundType> arguments; // example: Array<Actor>
-    QList<int> arrayDimensions; // example: string s[8];
+    QList<ZExpression*> arrayDimensions; // example: string s[8]; or string s[SIZE];
+
+    void destroy()
+    {
+        for (ZExpression* expr : arrayDimensions)
+            delete expr;
+        arrayDimensions.clear();
+        for (ZCompoundType& t : arguments)
+            t.destroy();
+    }
 };
 
 struct ZField : public ZTreeNode
@@ -73,17 +84,47 @@ struct ZField : public ZTreeNode
     ZField(ZTreeNode* p) : ZTreeNode(p) {}
     virtual NodeType type() { return Field; }
 
+    virtual ~ZField()
+    {
+        fieldType.destroy();
+    }
+
     ZCompoundType fieldType;
     QList<QString> flags;
     QString version;
     QString deprecated;
 };
 
-struct ZExpression;
+struct ZConstant : public ZTreeNode
+{
+    ZConstant(ZTreeNode* p) : ZTreeNode(p) {}
+    virtual NodeType type() { return Constant; }
+
+    // children = expression
+};
+
+struct ZProperty : public ZTreeNode
+{
+    ZProperty(ZTreeNode* p) : ZTreeNode(p) {}
+    virtual NodeType type() { return Property; }
+
+    // identifier = prop name
+    // property <name> : <field1> [, <field2> ... ]
+    QList<QString> fields;
+};
+
 struct ZMethod : public ZTreeNode
 {
     ZMethod(ZTreeNode* p) : ZTreeNode(p) {}
     virtual NodeType type() { return Method; }
+
+    virtual ~ZMethod()
+    {
+        for (ZCompoundType& rt : returnTypes)
+            rt.destroy();
+        for (Argument& arg : arguments)
+            arg.type.destroy();
+    }
 
     struct Argument
     {
