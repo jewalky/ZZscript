@@ -60,3 +60,5 @@ DEFINE_TOKEN2(44, OpLogicalAnd, "&&")
 DEFINE_TOKEN2(45, OpLogicalOr, "||")
 
 DEFINE_TOKEN2(46, OpSpaceship, "<>=") // apparently not classic <=>
+
+DEFINE_TOKEN2(47, Ellipsis, "...")

@@ -122,6 +122,7 @@ ZClass* Parser::parseClass(TokenStream& stream, bool extend)
     QString c_replaceName;
     QList<QString> c_flags;
     QString c_version;
+    QString c_deprecated;
 
     // this is very simple actually, just parse name and everything between {}
     // same for structs.
@@ -138,6 +139,7 @@ ZClass* Parser::parseClass(TokenStream& stream, bool extend)
         return nullptr;
     }
     c_className = token.value;
+    if (extend) c_extendName = c_className;
 
     skipWhitespace(stream, true);
     if (!stream.expectToken(token, Tokenizer::Colon|Tokenizer::OpenCurly|Tokenizer::Identifier))
@@ -187,27 +189,30 @@ ZClass* Parser::parseClass(TokenStream& stream, bool extend)
         // start of flags
         while (true)
         {
-            if (token.value == "version")
+            if (token.value == "version" || token.value == "deprecated")
             {
+                QString tt = token.value;
                 skipWhitespace(stream, true);
                 if (!stream.expectToken(token, Tokenizer::OpenParen))
                 {
-                    qDebug("parseClass: unexpected %s at line %d, expected version(\"string\")", token.toCString(), token.line);
+                    qDebug("parseClass: unexpected %s at line %d, expected %s(\"string\")", token.toCString(), token.line, tt.toUtf8().data());
                     return nullptr;
                 }
 
                 skipWhitespace(stream, true);
                 if (!stream.expectToken(token, Tokenizer::String))
                 {
-                    qDebug("parseClass: unexpected %s at line %d, expected version(\"string\")", token.toCString(), token.line);
+                    qDebug("parseClass: unexpected %s at line %d, expected %s(\"string\")", token.toCString(), token.line, tt.toUtf8().data());
                     return nullptr;
                 }
-                c_version = token.value;
+                if (token.value == "version")
+                    c_version = token.value;
+                else c_deprecated = token.value;
 
                 skipWhitespace(stream, true);
                 if (!stream.expectToken(token, Tokenizer::CloseParen))
                 {
-                    qDebug("parseClass: unexpected %s at line %d, expected version(\"string\")", token.toCString(), token.line);
+                    qDebug("parseClass: unexpected %s at line %d, expected %s(\"string\")", token.toCString(), token.line, tt.toUtf8().data());
                     return nullptr;
                 }
             }
@@ -252,6 +257,7 @@ ZClass* Parser::parseClass(TokenStream& stream, bool extend)
         cls->replaceName = c_replaceName;
         cls->tokens = classTokens;
         cls->version = c_version;
+        cls->deprecated = c_deprecated;
         cls->isValid = true;
         return cls;
     }
@@ -267,6 +273,7 @@ ZStruct* Parser::parseStruct(TokenStream& stream)
     QString s_structName;
     QList<QString> s_flags;
     QString s_version;
+    QString s_deprecated;
 
     // similar to class, but even simplier.
     // struct <name> [<flag1> [<flag2> [<flag3> ...]]] (or version("..."))
@@ -293,27 +300,30 @@ ZStruct* Parser::parseStruct(TokenStream& stream)
         // start of flags
         while (true)
         {
-            if (token.value == "version")
+            if (token.value == "version" || token.value == "deprecated")
             {
+                QString tt = token.value;
                 skipWhitespace(stream, true);
                 if (!stream.expectToken(token, Tokenizer::OpenParen))
                 {
-                    qDebug("parseStruct: unexpected %s at line %d, expected version(\"string\")", token.toCString(), token.line);
+                    qDebug("parseStruct: unexpected %s at line %d, expected %s(\"string\")", token.toCString(), token.line, tt.toUtf8().data());
                     return nullptr;
                 }
 
                 skipWhitespace(stream, true);
                 if (!stream.expectToken(token, Tokenizer::String))
                 {
-                    qDebug("parseStruct: unexpected %s at line %d, expected version(\"string\")", token.toCString(), token.line);
+                    qDebug("parseStruct: unexpected %s at line %d, expected %s(\"string\")", token.toCString(), token.line, tt.toUtf8().data());
                     return nullptr;
                 }
-                s_version = token.value;
+                if (token.value == "version")
+                    s_version = token.value;
+                else s_deprecated = token.value;
 
                 skipWhitespace(stream, true);
                 if (!stream.expectToken(token, Tokenizer::CloseParen))
                 {
-                    qDebug("parseStruct: unexpected %s at line %d, expected version(\"string\")", token.toCString(), token.line);
+                    qDebug("parseStruct: unexpected %s at line %d, expected %s(\"string\")", token.toCString(), token.line, tt.toUtf8().data());
                     return nullptr;
                 }
             }
@@ -355,6 +365,7 @@ ZStruct* Parser::parseStruct(TokenStream& stream)
         struc->identifier = s_structName;
         struc->tokens = classTokens;
         struc->version = s_version;
+        struc->deprecated = s_deprecated;
         struc->isValid = true;
         return struc;
     }

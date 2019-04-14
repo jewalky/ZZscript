@@ -76,6 +76,7 @@ struct ZField : public ZTreeNode
     ZCompoundType fieldType;
     QList<QString> flags;
     QString version;
+    QString deprecated;
 };
 
 struct ZExpression;
@@ -88,14 +89,19 @@ struct ZMethod : public ZTreeNode
     {
         QString name;
         ZExpression* defaultValue;
+        ZCompoundType type;
     };
 
     QList<ZCompoundType> returnTypes;
     QList<Argument> arguments;
     QList<QString> flags;
     QString version;
+    QString deprecated;
+    bool hasEllipsis;
 
     // children = parsed method statements (expressions, etc)
+    // tokens = after parseObjectFields, but before parseObjectMethods
+    QList<Tokenizer::Token> tokens;
 };
 
 struct ZStruct : public ZTreeNode
@@ -104,10 +110,12 @@ struct ZStruct : public ZTreeNode
     virtual NodeType type() { return Struct; }
 
     QString version;
+    QString deprecated;
     QList<QString> flags;
+    // after parseRoot, but before parseObjectFields
     QList<Tokenizer::Token> tokens;
 
-    QList<ZField*> fields;
+    // children = ZField, ZConstant, ZProperty.. (for classes)
 };
 
 struct ZClass : public ZStruct
@@ -119,7 +127,6 @@ struct ZClass : public ZStruct
 
     virtual NodeType type() { return Class; }
 
-    // todo: flags
     QString parentName;
     QString extendName;
     QString replaceName;
@@ -127,6 +134,16 @@ struct ZClass : public ZStruct
     ZClass* parentReference;
     ZClass* extendReference;
     ZClass* replaceReference;
+
+    QList<ZClass*> extensions;
+    QList<ZClass*> childrenReferences;
+    QList<ZClass*> replacedByReferences; // this is used later for checking
+
+    // todo: class and actor magic:
+    // - flags (actor flags)
+    // - props
+    // - default props (i.e. set props)
+    // - states
 };
 
 struct ZExpressionLeaf
@@ -313,6 +330,7 @@ private:
     ZEnum* parseEnum(TokenStream& stream);
 
     // this occurs in the class and struct body
+    bool parseCompoundType(TokenStream& stream, ZCompoundType& type);
     bool parseObjectFields(ZClass* cls, ZStruct* struc);
 
     // this occurs in methods
