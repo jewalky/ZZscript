@@ -3,12 +3,6 @@
 
 bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
 {
-    if (cls)
-    {
-        qDebug("parseObjectFields: not implemented yet");
-        return false;
-    }
-
     // at this point, we have a list of tokens contained inside the struct/class body.
     // there, we have values in one of the forms:
     // 1)
