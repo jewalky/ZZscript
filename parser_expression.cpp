@@ -508,6 +508,13 @@ static bool mergeBinaryExpressions(QList<ZExpressionLeaf>& leaves, ZExpression::
         ZExpression::Operator op = ZExpression::Invalid;
         switch (token.type)
         {
+        case Tokenizer::Identifier:
+            if (!token.value.compare("dot", Qt::CaseInsensitive))
+                op = ZExpression::VectorDot;
+            else if (!token.value.compare("cross", Qt::CaseInsensitive))
+                op = ZExpression::VectorCross;
+            else return false;
+            break;
         case Tokenizer::OpAssign:
             op = ZExpression::Assign;
             break;
@@ -875,6 +882,7 @@ ZExpression* Parser::parseExpression(TokenStream& stream, quint64 stopAtAnyOf)
                         if (i == exprTokens.size() || exprTokens[i].type == Tokenizer::Comma)
                         {
                             // since lastPos until i
+                            if (i < exprTokens.size()) specTokens.append(exprTokens[i]);
                             QList<Tokenizer::Token> localExprTokens = exprTokens.mid(lastPos, i-lastPos);
                             TokenStream exprStream(localExprTokens);
                             ZExpression* subexpr = parseExpression(exprStream, 0);
@@ -1083,6 +1091,21 @@ ZExpression* Parser::parseExpression(TokenStream& stream, quint64 stopAtAnyOf)
 
         switch (token.type)
         {
+        // vector operators
+        case Tokenizer::Identifier:
+        {
+            if (!token.value.compare("dot", Qt::CaseInsensitive) ||
+                    !token.value.compare("cross", Qt::CaseInsensitive))
+            {
+                ZExpressionLeaf leaf_op;
+                leaf_op.type = ZExpressionLeaf::Token;
+                leaf_op.token = token;
+                leaves.append(leaf_op);
+                break;
+            }
+
+            goto fail; // bad syntax
+        }
         // binary expressions
         case Tokenizer::OpAdd:
         case Tokenizer::OpSubtract:
@@ -1304,6 +1327,9 @@ ZExpression* Parser::parseExpression(TokenStream& stream, quint64 stopAtAnyOf)
         }
     }
 
+    // vector expressions
+    if (!mergeBinaryExpressions(leaves, ZExpression::VectorDot)) goto fail;
+    if (!mergeBinaryExpressions(leaves, ZExpression::VectorCross)) goto fail;
     // post increment
     if (!mergeBinaryExpressions(leaves, ZExpression::Increment, false)) goto fail;
     // post decrement

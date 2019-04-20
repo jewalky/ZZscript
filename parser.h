@@ -436,6 +436,10 @@ struct ZExpression : public ZTreeNode
         // magic
         Ternary,
 
+        // more magic
+        VectorDot,
+        VectorCross,
+
         Invalid = -1
     };
 
