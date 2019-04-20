@@ -45,8 +45,20 @@ static bool evaluateCast(ZExpressionLeaf& leaf, ZExpressionLeaf& out, QString ty
     typeFrom = typeFrom.toLower();
     typeTo = typeTo.toLower();
 
-    if (typeFrom == "float") typeFrom = "double";
-    if (typeTo == "float") typeTo = "double";
+    // get system types for both
+    ZSystemType* systemFrom = Parser::resolveSystemType(typeFrom);
+    ZSystemType* systemTo = Parser::resolveSystemType(typeTo);
+    if (!systemFrom || !systemTo)
+        return false;
+
+    // this evaluates only system ints and doubles
+    if (systemFrom->kind != ZSystemType::SType_Float && systemFrom->kind != ZSystemType::SType_Integer)
+        return false;
+    if (systemTo->kind != ZSystemType::SType_Float && systemTo->kind != ZSystemType::SType_Integer)
+        return false;
+
+    if (systemFrom->kind == ZSystemType::SType_Float) typeFrom = "double";
+    if (systemTo->kind == ZSystemType::SType_Float) typeTo = "double";
 
     if (typeFrom == typeTo)
     {
@@ -55,10 +67,9 @@ static bool evaluateCast(ZExpressionLeaf& leaf, ZExpressionLeaf& out, QString ty
     }
 
     // bool and int convert naturally
-    if ((typeFrom == "bool" || typeFrom == "int") &&
-        (typeTo == "bool" || typeTo == "int"))
+    if (systemFrom->kind == systemTo->kind)
     {
-        out.type = (typeTo == "int") ? ZExpressionLeaf::Integer : ZExpressionLeaf::Boolean;
+        out.type = (typeTo == "bool") ? ZExpressionLeaf::Boolean : ZExpressionLeaf::Integer;
         out.token.valueInt = leaf.token.valueInt;
         if (typeTo == "bool")
             out.token.valueInt = !!out.token.valueInt;
@@ -66,21 +77,19 @@ static bool evaluateCast(ZExpressionLeaf& leaf, ZExpressionLeaf& out, QString ty
     }
 
     // any int type converts to double
-    if ((typeFrom == "int" || typeFrom == "double" || typeFrom == "bool") &&
-        (typeTo == "double"))
+    if (systemFrom->kind == ZSystemType::SType_Integer && systemTo->kind == ZSystemType::SType_Float)
     {
         out.type = ZExpressionLeaf::Double;
-        out.token.valueDouble = (typeFrom == "double") ? leaf.token.valueDouble : leaf.token.valueInt;
+        out.token.valueDouble = (systemFrom->kind == ZSystemType::SType_Float) ? leaf.token.valueDouble : leaf.token.valueInt;
         return true;
     }
 
     // double converts only explicitly (?)
-    if ((typeFrom == "double") &&
-        (typeTo == "int" || typeTo == "bool"))
+    if (systemFrom->kind == ZSystemType::SType_Float && systemTo->kind == ZSystemType::SType_Integer)
     {
         if (!isexplicit)
             return false;
-        out.type = (typeTo == "int") ? ZExpressionLeaf::Integer : ZExpressionLeaf::Boolean;
+        out.type = (typeTo == "bool") ? ZExpressionLeaf::Boolean : ZExpressionLeaf::Integer;
         out.token.valueInt = int(leaf.token.valueDouble);
         return true;
     }
@@ -541,13 +550,30 @@ static bool mergeBinaryExpressions(QList<ZExpressionLeaf>& leaves, ZExpression::
             return false;
         }
 
+        // check if current token is not assign, and if next token is assign.
+        // if it is, then we have some weird assignment operator and we should not parse it here (entirely different priority)
+        // this works only with binary.
+        bool isAssign = false;
+        if (op != ZExpression::Assign)
+        {
+            if (i+1 < leaves.size() && leaves[i+1].type == ZExpressionLeaf::Token && leaves[i+1].token.type == Tokenizer::OpAssign)
+            {
+                isAssign = true;
+                // now, if we are currently parsing assignment, this is ok. but if not, we need to skip this sequence
+                if (mergeop != ZExpression::Assign)
+                    continue;
+                // otherwise remove next operator. this is so that rest of the code works as intended
+                leaves.removeAt(i+1);
+            }
+        }
+
         bool leftisexpr = (i-1 >= 0 && leaves[i-1].type != ZExpressionLeaf::Token);
         bool rightisexpr = (i+1 < leaves.size() && leaves[i+1].type != ZExpressionLeaf::Token);
 
         if (op == ZExpression::Sub && !leftisexpr && rightisexpr)
             op = ZExpression::UnaryMinus;
 
-        if (op != mergeop)
+        if (op != mergeop && !isAssign)
             continue;
 
         // check increment/decrement
@@ -628,6 +654,7 @@ static bool mergeBinaryExpressions(QList<ZExpressionLeaf>& leaves, ZExpression::
         newleaf.type = ZExpressionLeaf::Expression;
         newleaf.expr = new ZExpression(nullptr);
         newleaf.expr->op = op;
+        newleaf.expr->assign = isAssign || mergeop == ZExpression::Assign;
         newleaf.expr->leaves.append(leaves[i-1]);
         newleaf.expr->leaves.append(leaves[i+1]);
         leaves[i-1] = newleaf;
@@ -1007,6 +1034,8 @@ ZExpression* Parser::parseExpression(TokenStream& stream, quint64 stopAtAnyOf)
             leaf_op.type = ZExpressionLeaf::Token;
             leaf_op.token = token;
             leaves.append(leaf_op);
+            if (stream.peekToken(token) && token.type == Tokenizer::OpAssign)
+                skipleft = true;
             break;
         }
         case Tokenizer::OpenParen: // function call
@@ -1137,6 +1166,7 @@ ZExpression* Parser::parseExpression(TokenStream& stream, quint64 stopAtAnyOf)
     if (!mergeBinaryExpressions(leaves, ZExpression::Sub)) goto fail;
     if (!mergeBinaryExpressions(leaves, ZExpression::BitShl)) goto fail;
     if (!mergeBinaryExpressions(leaves, ZExpression::BitShr)) goto fail;
+    if (!mergeBinaryExpressions(leaves, ZExpression::BitShrUs)) goto fail;
     if (!mergeBinaryExpressions(leaves, ZExpression::BitAnd)) goto fail;
     if (!mergeBinaryExpressions(leaves, ZExpression::Xor)) goto fail;
     if (!mergeBinaryExpressions(leaves, ZExpression::BitOr)) goto fail;
@@ -1159,7 +1189,6 @@ fail:
     goto finish;
 
 finish:
-
     if (leaves.size() != 1 || didfail)
     {
         stream.setPosition(cpos);

@@ -301,6 +301,9 @@ QString DocumentEditor::makeTokenTooltip(ParserToken* tok)
             case ZTreeNode::Enum:
                 typeclass = "enum";
                 break;
+            case ZTreeNode::SystemType:
+                typeclass = "system";
+                break;
             default:
                 break;
             }

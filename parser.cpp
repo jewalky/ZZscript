@@ -1,6 +1,38 @@
 #include "parser.h"
 #include <cmath>
 
+QList<ZSystemType> Parser::systemTypes = QList<ZSystemType>()
+        << ZSystemType("string", ZSystemType::SType_String, 0, "StringStruct")
+        << ZSystemType("name", ZSystemType::SType_Integer, 32)
+        << ZSystemType("uint", ZSystemType::SType_Integer, 32)
+        << ZSystemType("int", ZSystemType::SType_Integer, 32)
+        << ZSystemType("uint16", ZSystemType::SType_Integer, 16)
+        << ZSystemType("int16", ZSystemType::SType_Integer, 16)
+        << ZSystemType("uint8", ZSystemType::SType_Integer, 8)
+        << ZSystemType("int8", ZSystemType::SType_Integer, 8)
+        << ZSystemType("sbyte", ZSystemType::SType_Integer, 8)
+        << ZSystemType("byte", ZSystemType::SType_Integer, 8)
+        << ZSystemType("short", ZSystemType::SType_Integer, 16)
+        << ZSystemType("ushort", ZSystemType::SType_Integer, 16)
+        << ZSystemType("double", ZSystemType::SType_Float, 64)
+        << ZSystemType("float", ZSystemType::SType_Float, 32)
+        << ZSystemType("float64", ZSystemType::SType_Float, 64)
+        << ZSystemType("float32", ZSystemType::SType_Float, 32)
+        << ZSystemType("color", ZSystemType::SType_Integer, 32)
+        << ZSystemType("vector2", ZSystemType::SType_Vector, 2)
+        << ZSystemType("vector3", ZSystemType::SType_Vector, 3)
+        << ZSystemType("array", ZSystemType::SType_Array, 0)
+        << ZSystemType("class", ZSystemType::SType_Class, 0)
+        << ZSystemType("readonly", ZSystemType::SType_Readonly, 0)
+        << ZSystemType("bool", ZSystemType::SType_Integer, 8)
+        << ZSystemType("sound", ZSystemType::SType_String, 0)
+        << ZSystemType("spriteid", ZSystemType::SType_Integer, 32)
+        << ZSystemType("state", ZSystemType::SType_Object, 0)
+        << ZSystemType("statelabel", ZSystemType::SType_String, 0)
+        << ZSystemType("textureid", ZSystemType::SType_Integer, 32)
+        << ZSystemType("void", ZSystemType::SType_Void, 0)
+        << ZSystemType("voidptr", ZSystemType::SType_Object, 0);
+
 Parser::Parser(QList<Tokenizer::Token> tokens) : tokens(tokens)
 {
     root = nullptr;
@@ -87,6 +119,8 @@ bool Parser::parse()
                 return false;
         }
     }
+
+    return true;
 }
 
 bool Parser::skipWhitespace(TokenStream& stream, bool newline)
@@ -274,4 +308,15 @@ ZTreeNode* Parser::resolveType(QString name, ZStruct* context, bool onlycontext)
     }
 
     return nullptr; // not found
+}
+
+ZSystemType* Parser::resolveSystemType(QString name)
+{
+    for (ZSystemType& t : systemTypes)
+    {
+        if (!t.identifier.compare(name, Qt::CaseInsensitive))
+            return &t;
+    }
+
+    return nullptr;
 }

@@ -571,52 +571,66 @@ bool Parser::parseCompoundType(TokenStream& stream, ZCompoundType& type, ZStruct
     }
     while (iterContext);
 
-    ZTreeNode* lastType = resolveType(token.value, context);
-    if (!lastType)
+    // resolve system type
+    ZSystemType* systemType = resolveSystemType(token.value);
+    if (systemType)
     {
-        qDebug("parseCompoundType: warning: unresolved type %s", token.value.toUtf8().data());
+        type.type = token.value.toLower();
+        type.systemType = systemType;
+        type.reference = nullptr;
+
+        parsedTokens.append(ParserToken(token, ParserToken::TypeName, systemType, token.value));
+    }
+    else
+    {
+        ZTreeNode* lastType = resolveType(token.value, context);
+        if (!lastType)
+        {
+            qDebug("parseCompoundType: warning: unresolved type %s", token.value.toUtf8().data());
+        }
+
+        if (lastType && (!lastType->parent || lastType->parent->type() == ZTreeNode::FileRoot))
+            prependContext = "";
+
+        parsedTokens.append(ParserToken(token, ParserToken::TypeName, lastType, prependContext+token.value));
+
+        // check for multi-component type (i.e. A.B.C)
+        QString fullType = token.value;
+        int cpos;
+        while (true)
+        {
+            cpos = stream.position();
+            skipWhitespace(stream, true);
+            if (stream.peekToken(token) && token.type == Tokenizer::Dot)
+            {
+                parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
+                stream.setPosition(stream.position()+1);
+                if (!stream.expectToken(token, Tokenizer::Identifier))
+                {
+                    qDebug("parseCompoundType: expected identifer at line %d", token.line);
+                    return false;
+                }
+                fullType += "."+token.value;
+                lastType = resolveType(fullType, context);
+                if (!lastType)
+                {
+                    qDebug("parseCompoundType: warning: unresolved type %s", fullType.toUtf8().data());
+                }
+                parsedTokens.append(ParserToken(token, ParserToken::TypeName, lastType, prependContext+fullType));
+            }
+            else
+            {
+                stream.setPosition(cpos);
+                break;
+            }
+        }
+
+        type.type = token.value.toLower();
+        type.reference = lastType;
+        type.systemType = nullptr;
     }
 
-    if (lastType && (!lastType->parent || lastType->parent->type() == ZTreeNode::FileRoot))
-        prependContext = "";
-
-    parsedTokens.append(ParserToken(token, ParserToken::TypeName, lastType, prependContext+token.value));
-
-    // check for multi-component type (i.e. A.B.C)
-    QString fullType = token.value;
-    int cpos;
-    while (true)
-    {
-        cpos = stream.position();
-        skipWhitespace(stream, true);
-        if (stream.peekToken(token) && token.type == Tokenizer::Dot)
-        {
-            parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
-            stream.setPosition(stream.position()+1);
-            if (!stream.expectToken(token, Tokenizer::Identifier))
-            {
-                qDebug("parseCompoundType: expected identifer at line %d", token.line);
-                return false;
-            }
-            fullType += "."+token.value;
-            lastType = resolveType(fullType, context);
-            if (!lastType)
-            {
-                qDebug("parseCompoundType: warning: unresolved type %s", fullType.toUtf8().data());
-            }
-            parsedTokens.append(ParserToken(token, ParserToken::TypeName, lastType, prependContext+fullType));
-        }
-        else
-        {
-            stream.setPosition(cpos);
-            break;
-        }
-    }
-
-    type.type = token.value;
-    type.reference = nullptr;
-
-    cpos = stream.position();
+    int cpos = stream.position();
     skipWhitespace(stream, true);
     if (stream.expectToken(token, Tokenizer::OpLessThan))
     {

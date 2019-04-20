@@ -24,7 +24,8 @@ struct ZTreeNode
         Constant,
         Property,
         LocalVariable,
-        ExecutionControl
+        ExecutionControl,
+        SystemType
     };
 
     ZTreeNode* parent;
@@ -64,12 +65,50 @@ struct ZInclude : public ZTreeNode
 
 struct ZExpression;
 struct ZStruct;
+struct ZSystemType : public ZTreeNode
+{
+    ZSystemType(ZTreeNode* p) : ZTreeNode(p) {}
+
+    virtual NodeType type() { return SystemType; }
+
+    enum SystemTypeKind
+    {
+        SType_String,
+        SType_Integer,
+        SType_Float,
+        SType_Vector,
+        SType_Array,
+        SType_Class,
+        SType_Readonly,
+        SType_Void,
+        SType_Object
+    };
+
+    SystemTypeKind kind;
+    int size;
+    QString replaceType;
+
+    ZSystemType() : ZTreeNode(nullptr) {}
+    ZSystemType(QString tname, SystemTypeKind tkind, int tsize, QString treplaceType = "")
+        : ZTreeNode(nullptr), kind(tkind), size(tsize), replaceType(treplaceType)
+    {
+        identifier = tname;
+    }
+};
+
 struct ZCompoundType
 {
     QString type;
-    ZStruct* reference;
+    ZTreeNode* reference;
+    ZSystemType* systemType;
     QList<ZCompoundType> arguments; // example: Array<Actor>
     QList<ZExpression*> arrayDimensions; // example: string s[8]; or string s[SIZE];
+
+    ZCompoundType()
+    {
+        reference = nullptr;
+        systemType = nullptr;
+    }
 
     void destroy()
     {
@@ -78,6 +117,24 @@ struct ZCompoundType
         arrayDimensions.clear();
         for (ZCompoundType& t : arguments)
             t.destroy();
+    }
+
+    bool isSystem()
+    {
+        if (reference)
+            return false;
+        if (systemType)
+            return true;
+        return false;
+    }
+
+    bool isUser()
+    {
+        if (systemType)
+            return false;
+        if (reference)
+            return true;
+        return false;
     }
 };
 
@@ -145,7 +202,11 @@ struct ZExecutionControl : public ZTreeNode
 
 struct ZForCycle : public ZTreeNode
 {
-    ZForCycle(ZTreeNode* p) : ZTreeNode(p) {}
+    ZForCycle(ZTreeNode* p) : ZTreeNode(p)
+    {
+        condition = nullptr;
+    }
+
     virtual NodeType type() { return ForCycle; }
 
     //
@@ -156,6 +217,25 @@ struct ZForCycle : public ZTreeNode
     virtual ~ZForCycle();
 
     // children = code block
+};
+
+struct ZCondition : public ZTreeNode
+{
+    ZCondition(ZTreeNode* p) : ZTreeNode(p)
+    {
+        condition = nullptr;
+        elseBlock = nullptr;
+    }
+
+    virtual NodeType type() { return Condition; }
+
+    //
+    ZExpression* condition;
+
+    //
+    ZTreeNode* elseBlock;
+
+    virtual ~ZCondition();
 };
 
 struct ZConstant : public ZTreeNode
@@ -287,7 +367,12 @@ struct ZExpressionLeaf
 
 struct ZExpression : public ZTreeNode
 {
-    ZExpression(ZTreeNode* p) : ZTreeNode(p) {}
+    ZExpression(ZTreeNode* p) : ZTreeNode(p)
+    {
+        op = Invalid;
+        assign = false;
+    }
+
     virtual ~ZExpression();
 
     virtual NodeType type() { return Expression; }
@@ -351,6 +436,7 @@ struct ZExpression : public ZTreeNode
     };
 
     Operator op;
+    bool assign;
 
     QList<Tokenizer::Token> operatorTokens;
     QList<ZExpressionLeaf> leaves;
@@ -443,9 +529,14 @@ public:
     void reportError(QString err);
     void reportWarning(QString warn);
 
+    //
+    static ZSystemType* resolveSystemType(QString name);
+
 private:
     QList<Tokenizer::Token> tokens;
     QList<ZTreeNode*> types;
+    // System type info. Initialized once
+    static QList<ZSystemType> systemTypes;
 
     bool skipWhitespace(TokenStream& stream, bool newline);
     bool consumeTokens(TokenStream& stream, QList<Tokenizer::Token>& out, quint64 stopAtAnyOf);
@@ -470,6 +561,7 @@ private:
     // context = nearest outer class
     ZCodeBlock* parseCodeBlock(TokenStream& stream, ZCodeBlock* parent, ZTreeNode* aux, ZStruct* context);
     ZForCycle* parseForCycle(TokenStream& stream, ZCodeBlock* parent, ZTreeNode* aux, ZStruct* context);
+    ZCondition* parseCondition(TokenStream& stream, ZCodeBlock* parent, ZTreeNode* aux, ZStruct* context);
 
     enum
     {
@@ -477,9 +569,15 @@ private:
         Stmt_Expression = 0x0002, // i = 1;
         Stmt_Cycle = 0x0004, // for (int i = 1; ...)
         Stmt_CycleControl = 0x0008, // break;
-        Stmt_Return = 0x0010 // return i;
+        Stmt_Return = 0x0010, // return i;
+        Stmt_Condition = 0x0020, // if (i == 666) or switch(i)
+
+        // predefined
+        Stmt_CycleInitializer = Stmt_Initializer|Stmt_Expression,
+        Stmt_Function = Stmt_Initializer|Stmt_Expression|Stmt_Cycle|Stmt_Return|Stmt_Condition
     };
     QList<ZTreeNode*> parseStatement(TokenStream& stream, ZCodeBlock* parent, ZTreeNode* aux, ZStruct* context, quint64 flags, quint64 stopAtAnyOf);
+    ZCodeBlock* parseCodeBlockOrLine(TokenStream& stream, ZCodeBlock* parent, ZTreeNode* aux, ZStruct* context, ZTreeNode* recip);
 
     // helper
     ZTreeNode* resolveType(QString name, ZStruct* context = nullptr, bool onlycontext = false);
