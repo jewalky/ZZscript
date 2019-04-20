@@ -63,7 +63,7 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
                 qDebug("parseObjectFields: unexpected %s, expected assignment operator at line %d", token.toCString(), token.line);
                 return false;
             }
-            parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
+            parsedTokens.append(ParserToken(token, ParserToken::Operator));
             skipWhitespace(stream, true);
             ZExpression* c_expression = parseExpression(stream, Tokenizer::Semicolon);
             if (!c_expression)
@@ -303,7 +303,7 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
             if (token.type == Tokenizer::OpAssign)
             {
                 // assignment token
-                parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
+                parsedTokens.append(ParserToken(token, ParserToken::Operator));
                 //
                 skipWhitespace(stream, true);
                 assignmentExpr = parseExpression(stream, Tokenizer::Semicolon);
@@ -424,6 +424,7 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
                 ZExpression* dexpr = nullptr;
                 if (token.type == Tokenizer::OpAssign)
                 {
+                    parsedTokens.append(ParserToken(token, ParserToken::Operator));
                     skipWhitespace(stream, true);
                     // parse default expression
                     dexpr = parseExpression(stream, Tokenizer::CloseParen|Tokenizer::Comma);

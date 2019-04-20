@@ -443,6 +443,7 @@ struct ZExpression : public ZTreeNode
     bool assign;
 
     QList<Tokenizer::Token> operatorTokens;
+    QList<Tokenizer::Token> specialTokens;
     QList<ZExpressionLeaf> leaves;
 
     bool evaluate(ZExpressionLeaf& out, QString& type);
@@ -566,6 +567,8 @@ private:
     ZCodeBlock* parseCodeBlock(TokenStream& stream, ZCodeBlock* parent, ZTreeNode* aux, ZStruct* context);
     ZForCycle* parseForCycle(TokenStream& stream, ZCodeBlock* parent, ZTreeNode* aux, ZStruct* context);
     ZCondition* parseCondition(TokenStream& stream, ZCodeBlock* parent, ZTreeNode* aux, ZStruct* context);
+    // magic
+    void highlightExpression(ZExpression* expr, ZCodeBlock* parent, ZTreeNode* aux, ZStruct* context);
 
     enum
     {

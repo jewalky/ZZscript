@@ -75,7 +75,7 @@ ZForCycle* Parser::parseForCycle(TokenStream& stream, ZCodeBlock* parent, ZTreeN
     QList<ZTreeNode*> initializers = parseStatement(stream, parent, aux, context, Stmt_CycleInitializer, Tokenizer::Semicolon);
     cycle->initializers = initializers;
 
-    QList<ZTreeNode*> condition = parseStatement(stream, parent, aux, context, Stmt_Expression, Tokenizer::Semicolon);
+    QList<ZTreeNode*> condition = parseStatement(stream, parent, cycle, context, Stmt_Expression, Tokenizer::Semicolon);
     cycle->condition = condition.size() ? reinterpret_cast<ZExpression*>(condition[0]) : nullptr;
     if (cycle->condition->type() != ZTreeNode::Expression)
     {
@@ -99,6 +99,7 @@ ZForCycle* Parser::parseForCycle(TokenStream& stream, ZCodeBlock* parent, ZTreeN
                 return nullptr;
             }
         }
+        highlightExpression(expr, parent, cycle, context);
         cycle->step.append(expr);
         skipWhitespace(stream, true);
         if (!stream.expectToken(token, Tokenizer::Comma|Tokenizer::CloseParen))
@@ -213,7 +214,7 @@ QList<ZTreeNode*> Parser::parseStatement(TokenStream& stream, ZCodeBlock* parent
                     for (ZTreeNode* node : nodes) delete node;
                     return empty;
                 }
-                parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
+                parsedTokens.append(ParserToken(token, ParserToken::Operator));
                 skipWhitespace(stream, true);
                 ZExpression* expr = parseExpression(stream, Tokenizer::Comma|stopAtAnyOf);
                 if (!expr)
@@ -222,6 +223,7 @@ QList<ZTreeNode*> Parser::parseStatement(TokenStream& stream, ZCodeBlock* parent
                     for (ZTreeNode* node : nodes) delete node;
                     return empty;
                 }
+                highlightExpression(expr, parent, aux, context);
                 ZLocalVariable* var = new ZLocalVariable(nullptr);
                 var->hasType = false;
                 var->lineNumber = identifierToken.line;
@@ -315,6 +317,7 @@ QList<ZTreeNode*> Parser::parseStatement(TokenStream& stream, ZCodeBlock* parent
             if (expr)
             {
                 nodes.append(expr);
+                highlightExpression(expr, parent, aux, context);
 
                 if (!stream.expectToken(token, stopAtAnyOf))
                 {
@@ -360,7 +363,7 @@ QList<ZTreeNode*> Parser::parseStatement(TokenStream& stream, ZCodeBlock* parent
                     skipWhitespace(stream, true);
                     if (stream.peekToken(token) && token.type == Tokenizer::OpAssign)
                     {
-                        parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
+                        parsedTokens.append(ParserToken(token, ParserToken::Operator));
                         stream.setPosition(stream.position()+1);
                         skipWhitespace(stream, true);
                         expr = parseExpression(stream, Tokenizer::Comma|Tokenizer::Semicolon);
@@ -371,6 +374,7 @@ QList<ZTreeNode*> Parser::parseStatement(TokenStream& stream, ZCodeBlock* parent
                             for (ZTreeNode* node : nodes) delete node;
                             return empty;
                         }
+                        highlightExpression(expr, parent, aux, context);
                     }
                     else if (stream.peekToken(token) && token.type == Tokenizer::OpenSquare)
                     {
@@ -409,6 +413,7 @@ QList<ZTreeNode*> Parser::parseStatement(TokenStream& stream, ZCodeBlock* parent
                                 for (ZTreeNode* node : nodes) delete node;
                                 return empty;
                             }
+                            highlightExpression(expr, parent, aux, context);
                             ftype.arrayDimensions.append(expr);
                             // check for next subscript
                             skipWhitespace(stream, true);
@@ -485,6 +490,7 @@ ZCondition* Parser::parseCondition(TokenStream& stream, ZCodeBlock* parent, ZTre
         delete cond;
         return nullptr;
     }
+    highlightExpression(expr, parent, aux, context);
     cond->condition = expr;
 
     skipWhitespace(stream, true);
@@ -519,7 +525,6 @@ ZCondition* Parser::parseCondition(TokenStream& stream, ZCodeBlock* parent, ZTre
             return nullptr;
         }
         elseBlock->parent = cond;
-        cond->children.append(elseBlock);
         cond->elseBlock = elseBlock;
     }
     else stream.setPosition(cpos);
