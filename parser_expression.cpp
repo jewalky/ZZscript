@@ -1554,10 +1554,19 @@ void Parser::highlightExpression(ZExpression* expr, ZCodeBlock* parent, ZTreeNod
     for (Tokenizer::Token& tok : expr->specialTokens)
         parsedTokens.append(ParserToken(tok, ParserToken::SpecialToken));
 
+    static QList<QString> keywords = QList<QString>() << "true" << "false" << "null";
+
     for (ZExpressionLeaf& leaf : expr->leaves)
     {
         switch (leaf.type)
         {
+        case ZExpressionLeaf::Boolean:
+            parsedTokens.append(ParserToken(leaf.token, ParserToken::Keyword));
+            break;
+        case ZExpressionLeaf::Identifier:
+            if (keywords.contains(leaf.token.value.toLower()))
+                parsedTokens.append(ParserToken(leaf.token, ParserToken::Keyword));
+            break;
         case ZExpressionLeaf::Expression:
             highlightExpression(leaf.expr, parent, aux, context);
             break;

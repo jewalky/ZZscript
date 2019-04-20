@@ -255,12 +255,21 @@ QList<ZTreeNode*> Parser::parseStatement(TokenStream& stream, ZCodeBlock* parent
             ZExpression* expr = parseExpression(stream, Tokenizer::Semicolon);
             if (!expr)
             {
-                qDebug("parseStatement: expected valid return expression at line %d", token.line);
-                for (ZTreeNode* node : nodes) delete node;
-                return empty;
+                // check if return without value
+                skipWhitespace(stream, true);
+                if (!stream.expectToken(token, Tokenizer::Semicolon))
+                {
+                    qDebug("parseStatement: expected valid return expression at line %d", token.line);
+                    for (ZTreeNode* node : nodes) delete node;
+                    return empty;
+                }
+            }
+            else
+            {
+                highlightExpression(expr, parent, aux, context);
             }
             ZExecutionControl* ctl = new ZExecutionControl(nullptr);
-            expr->parent = ctl;
+            if (expr) expr->parent = ctl;
             ctl->children.append(expr);
             ctl->ctlType = ZExecutionControl::CtlReturn;
             nodes.append(ctl);
