@@ -1543,9 +1543,13 @@ void Parser::dumpExpression(ZExpression* expr, int level)
 
 void Parser::highlightExpression(ZExpression* expr, ZTreeNode* parent, ZStruct* context)
 {
+    for (Tokenizer::Token& tok : expr->operatorTokens)
+        parsedTokens.append(ParserToken(tok, ParserToken::Operator));
+    for (Tokenizer::Token& tok : expr->specialTokens)
+        parsedTokens.append(ParserToken(tok, ParserToken::SpecialToken));
+
     // produces smart syntax highlighting based on various contexts:
     // parent = block that contains this expression
-    // aux = cycle that contains this expression
     // context = struct that contains this expression (for types)
     if (expr->op == ZExpression::Call)
     {
@@ -1574,11 +1578,6 @@ void Parser::highlightExpression(ZExpression* expr, ZTreeNode* parent, ZStruct* 
             return;
         }
     }
-
-    for (Tokenizer::Token& tok : expr->operatorTokens)
-        parsedTokens.append(ParserToken(tok, ParserToken::Operator));
-    for (Tokenizer::Token& tok : expr->specialTokens)
-        parsedTokens.append(ParserToken(tok, ParserToken::SpecialToken));
 
     static QList<QString> keywords = QList<QString>() << "true" << "false" << "null";
 
