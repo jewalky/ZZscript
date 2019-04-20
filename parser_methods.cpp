@@ -333,6 +333,7 @@ QList<ZTreeNode*> Parser::parseStatement(TokenStream& stream, ZCodeBlock* parent
                     isConst = true;
                     stream.setPosition(stream.position()+1);
                 }
+                QList<ZCompoundType> types;
                 ZCompoundType type;
                 if (!parseCompoundType(stream, type, context))
                 {
@@ -342,12 +343,14 @@ QList<ZTreeNode*> Parser::parseStatement(TokenStream& stream, ZCodeBlock* parent
                 }
                 while (true)
                 {
+                    ZCompoundType ftype = type;
                     // make a new local variable
                     // todo: check if already present
                     skipWhitespace(stream, true);
                     if (!stream.expectToken(token, Tokenizer::Identifier))
                     {
                         qDebug("parseStatement: unexpected %s, expected variable name at line %d", token.toCString(), token.line);
+                        for (ZCompoundType& type : types) type.destroy();
                         for (ZTreeNode* node : nodes) delete node;
                         return empty;
                     }
@@ -364,14 +367,62 @@ QList<ZTreeNode*> Parser::parseStatement(TokenStream& stream, ZCodeBlock* parent
                         if (!expr)
                         {
                             qDebug("parseStatement: expected valid assignment expression at line %d", token.toCString(), token.line);
+                            for (ZCompoundType& type : types) type.destroy();
                             for (ZTreeNode* node : nodes) delete node;
                             return empty;
+                        }
+                    }
+                    else if (stream.peekToken(token) && token.type == Tokenizer::OpenSquare)
+                    {
+                        while (true)
+                        {
+                            stream.setPosition(stream.position()+1);
+                            parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
+                            // read array dimensions. they are mutually incompatible with assignment... at least for now
+                            // read in subscript
+                            QList<Tokenizer::Token> subTokens;
+                            if (!consumeTokens(stream, subTokens, Tokenizer::CloseSquare))
+                            {
+                                qDebug("parseStatement: unexpected end of stream while reading array expression at line %d", token.line);
+                                for (ZCompoundType& type : types) type.destroy();
+                                for (ZTreeNode* node : nodes) delete node;
+                                return empty;
+                            }
+                            //
+                            // make sure we did find a close square
+                            stream.peekToken(token);
+                            if (!stream.expectToken(token, Tokenizer::CloseSquare))
+                            {
+                                qDebug("parseStatement: unexpected %s, expected closing square while reading array expression at line %d", token.toCString(), token.line);
+                                for (ZCompoundType& type : types) type.destroy();
+                                for (ZTreeNode* node : nodes) delete node;
+                                return empty;
+                            }
+                            parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
+                            // parse expression under this subscript
+                            TokenStream exprStream(subTokens);
+                            ZExpression* expr = parseExpression(exprStream, 0);
+                            if (!expr)
+                            {
+                                qDebug("parseStatement: expected valid expression while reading array expression at line %d", token.line);
+                                for (ZCompoundType& type : types) type.destroy();
+                                for (ZTreeNode* node : nodes) delete node;
+                                return empty;
+                            }
+                            ftype.arrayDimensions.append(expr);
+                            // check for next subscript
+                            skipWhitespace(stream, true);
+                            if (stream.peekToken(token) && token.type == Tokenizer::OpenSquare)
+                                continue;
+                            break;
                         }
                     }
                     ZLocalVariable* var = new ZLocalVariable(nullptr);
                     if (isConst)
                         var->flags.append("const");
-                    var->hasType = false;
+                    var->hasType = true;
+                    var->varType = ftype;
+                    types.append(ftype);
                     var->lineNumber = identifierToken.line;
                     if (expr)
                     {
@@ -385,6 +436,7 @@ QList<ZTreeNode*> Parser::parseStatement(TokenStream& stream, ZCodeBlock* parent
                     if (!stream.expectToken(token, Tokenizer::Comma|Tokenizer::Semicolon))
                     {
                         qDebug("parseStatement: unexpected %s, expected next variable or semicolon at line %d", token.toCString(), token.line);
+                        for (ZCompoundType& type : types) type.destroy();
                         for (ZTreeNode* node : nodes) delete node;
                         return empty;
                     }

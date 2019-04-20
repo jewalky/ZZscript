@@ -455,6 +455,45 @@ bool ZExpression::evaluate(ZExpressionLeaf& out, QString& type)
     }
 }
 
+static bool mergeTernaryExpression(QList<ZExpressionLeaf>& leaves)
+{
+    // it finds all instances of ?, searches for corresponding : and combines it into a single expression
+    for (int i = 0; i < leaves.size(); i++)
+    {
+        ZExpressionLeaf& leaf = leaves[i];
+        if (leaf.type != ZExpressionLeaf::Token)
+            continue;
+        Tokenizer::Token& token = leaf.token;
+        if (token.type == Tokenizer::Questionmark) // ternary start
+        {
+            bool leftisexpr = (i-1 >= 0 && leaves[i-1].type != ZExpressionLeaf::Token);
+            bool rightisexpr = (i+1 < leaves.size() && leaves[i+1].type != ZExpressionLeaf::Token);
+            bool thirdisexpr = (i+3 < leaves.size() && leaves[i+3].type != ZExpressionLeaf::Token);
+            bool colonfound = (i+2 < leaves.size() && leaves[i+2].type == ZExpressionLeaf::Token && leaves[i+2].token.type == Tokenizer::Colon);
+            if (!leftisexpr || !rightisexpr || !thirdisexpr || !colonfound)
+                return false; // bad ternary, but operator found
+
+            ZExpressionLeaf newleaf;
+            newleaf.type = ZExpressionLeaf::Expression;
+            newleaf.expr = new ZExpression(nullptr);
+            newleaf.expr->op = ZExpression::Ternary;
+            newleaf.expr->assign = false;
+            newleaf.expr->leaves.append(leaves[i-1]);
+            newleaf.expr->leaves.append(leaves[i+1]);
+            newleaf.expr->leaves.append(leaves[i+3]);
+            leaves[i-1] = newleaf;
+            leaves.removeAt(i); // ?
+            leaves.removeAt(i); // true expr
+            leaves.removeAt(i); // :
+            leaves.removeAt(i); // false expr
+            i--;
+            continue;
+        }
+    }
+
+    return true;
+}
+
 static bool mergeBinaryExpressions(QList<ZExpressionLeaf>& leaves, ZExpression::Operator mergeop, bool right = false)
 {
     // now merge expressions by operator priority and applicability (?)
@@ -545,6 +584,9 @@ static bool mergeBinaryExpressions(QList<ZExpressionLeaf>& leaves, ZExpression::
         case Tokenizer::OpDecrement:
             op = ZExpression::Decrement;
             break;
+        case Tokenizer::Questionmark:
+        case Tokenizer::Colon:
+            continue; // do not try to do anything with ternary here
         default:
             // unknown
             return false;
@@ -665,6 +707,26 @@ static bool mergeBinaryExpressions(QList<ZExpressionLeaf>& leaves, ZExpression::
     }
 
     return true;
+}
+
+// check if token is valid for operator combo (like +=, -=..)
+static bool isValidForAssign(Tokenizer::TokenType type)
+{
+    switch (type)
+    {
+    case Tokenizer::OpAdd: // +=
+    case Tokenizer::OpSubtract: // -=
+    case Tokenizer::OpMultiply: // *=
+    case Tokenizer::OpDivide: // /=
+    case Tokenizer::OpOr: // |=
+    case Tokenizer::OpAnd: // &=
+    case Tokenizer::OpLeftShift: // <<=
+    case Tokenizer::OpRightShift: // >>=
+    case Tokenizer::OpRightShiftUnsigned: // >>>=
+        return true;
+    default:
+        return false;
+    }
 }
 
 ZExpression* Parser::parseExpression(TokenStream& stream, quint64 stopAtAnyOf)
@@ -1029,12 +1091,14 @@ ZExpression* Parser::parseExpression(TokenStream& stream, quint64 stopAtAnyOf)
         case Tokenizer::OpAssign:
         case Tokenizer::OpIncrement:
         case Tokenizer::OpDecrement:
+        case Tokenizer::Questionmark:
+        case Tokenizer::Colon:
         {
             ZExpressionLeaf leaf_op;
             leaf_op.type = ZExpressionLeaf::Token;
             leaf_op.token = token;
             leaves.append(leaf_op);
-            if (stream.peekToken(token) && token.type == Tokenizer::OpAssign)
+            if (isValidForAssign(token.type) && stream.peekToken(token) && token.type == Tokenizer::OpAssign)
                 skipleft = true;
             break;
         }
@@ -1074,6 +1138,10 @@ ZExpression* Parser::parseExpression(TokenStream& stream, quint64 stopAtAnyOf)
                         delete arrsubscripts[i].expr;
                     goto fail;
                 }
+                ZExpressionLeaf subleaf;
+                subleaf.type = ZExpressionLeaf::Expression;
+                subleaf.expr = expr;
+                arrsubscripts.append(subleaf);
                 // check for next subscript
                 skipWhitespace(stream, true);
                 if (stream.peekToken(token) && token.type == Tokenizer::OpenSquare)
@@ -1239,6 +1307,8 @@ ZExpression* Parser::parseExpression(TokenStream& stream, quint64 stopAtAnyOf)
     if (!mergeBinaryExpressions(leaves, ZExpression::CmpSpaceship)) goto fail;
     if (!mergeBinaryExpressions(leaves, ZExpression::LogicalAnd)) goto fail;
     if (!mergeBinaryExpressions(leaves, ZExpression::LogicalOr)) goto fail;
+    // ternary expression is below all other expressions except assignment
+    if (!mergeTernaryExpression(leaves)) goto fail;
     if (!mergeBinaryExpressions(leaves, ZExpression::Assign)) goto fail;
 
     // using "goto fail" instead of return-whatever, guarantees that all expressions are deleted correctly

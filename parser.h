@@ -433,6 +433,9 @@ struct ZExpression : public ZTreeNode
         VectorInitialization,
         ArrayInitialization,
 
+        // magic
+        Ternary,
+
         Invalid = -1
     };
 
