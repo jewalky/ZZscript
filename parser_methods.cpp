@@ -12,7 +12,7 @@ bool Parser::parseObjectMethods(ZClass* cls, ZStruct* struc)
         // parse method
         ZMethod* method = reinterpret_cast<ZMethod*>(node);
         TokenStream stream(method->tokens);
-        ZCodeBlock* rootBlock = parseCodeBlock(stream, nullptr, nullptr, struc);
+        ZCodeBlock* rootBlock = parseCodeBlock(stream, nullptr, struc);
         if (!rootBlock)
         {
             qDebug("parseObjectMethods: failed to parse '%s'", method->identifier.toUtf8().data());
@@ -24,14 +24,14 @@ bool Parser::parseObjectMethods(ZClass* cls, ZStruct* struc)
     return true;
 }
 
-ZCodeBlock* Parser::parseCodeBlock(TokenStream& stream, ZCodeBlock* parent, ZTreeNode* aux, ZStruct* context)
+ZCodeBlock* Parser::parseCodeBlock(TokenStream& stream, ZTreeNode* parent, ZStruct* context)
 {
-    ZCodeBlock* block = new ZCodeBlock(nullptr);
+    ZCodeBlock* block = new ZCodeBlock(parent);
     while (true)
     {
         quint64 flags = Stmt_Function;
-        if (aux) flags |= Stmt_CycleControl;
-        QList<ZTreeNode*> rootStatements = parseStatement(stream, block, aux, context, flags, Tokenizer::Semicolon);
+        flags |= Stmt_CycleControl; // todo: check if there is a cycle in the hierarchy
+        QList<ZTreeNode*> rootStatements = parseStatement(stream, block, context, flags, Tokenizer::Semicolon);
 
         if (!rootStatements.size())
             break; // done
@@ -57,10 +57,11 @@ ZForCycle::~ZForCycle()
     condition = nullptr;
 }
 
-ZForCycle* Parser::parseForCycle(TokenStream& stream, ZCodeBlock* parent, ZTreeNode* aux, ZStruct* context)
+ZForCycle* Parser::parseForCycle(TokenStream& stream, ZTreeNode* parent, ZStruct* context)
 {
     // "for" is already parsed here. skip it
     ZForCycle* cycle = new ZForCycle(nullptr);
+    cycle->parent = parent;
     cycle->condition = nullptr;
     skipWhitespace(stream, true);
     Tokenizer::Token token;
@@ -72,10 +73,10 @@ ZForCycle* Parser::parseForCycle(TokenStream& stream, ZCodeBlock* parent, ZTreeN
     }
     parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
     // either expression or list of initializers. same rules as local variables. todo: move out to some function
-    QList<ZTreeNode*> initializers = parseStatement(stream, parent, aux, context, Stmt_CycleInitializer, Tokenizer::Semicolon);
+    QList<ZTreeNode*> initializers = parseStatement(stream, parent, context, Stmt_CycleInitializer, Tokenizer::Semicolon);
     cycle->initializers = initializers;
 
-    QList<ZTreeNode*> condition = parseStatement(stream, parent, cycle, context, Stmt_Expression, Tokenizer::Semicolon);
+    QList<ZTreeNode*> condition = parseStatement(stream, cycle, context, Stmt_Expression, Tokenizer::Semicolon);
     cycle->condition = condition.size() ? reinterpret_cast<ZExpression*>(condition[0]) : nullptr;
     if (cycle->condition->type() != ZTreeNode::Expression)
     {
@@ -99,7 +100,7 @@ ZForCycle* Parser::parseForCycle(TokenStream& stream, ZCodeBlock* parent, ZTreeN
                 return nullptr;
             }
         }
-        highlightExpression(expr, parent, cycle, context);
+        highlightExpression(expr, cycle, context);
         cycle->step.append(expr);
         skipWhitespace(stream, true);
         if (!stream.expectToken(token, Tokenizer::Comma|Tokenizer::CloseParen))
@@ -136,7 +137,7 @@ ZForCycle* Parser::parseForCycle(TokenStream& stream, ZCodeBlock* parent, ZTreeN
         parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
 
         TokenStream childTs(tokens);
-        ZCodeBlock* block = parseCodeBlock(childTs, parent, cycle, context);
+        ZCodeBlock* block = parseCodeBlock(childTs, cycle, context);
         if (!block)
         {
             qDebug("parseForCycle: expected valid code block at line %d", token.line);
@@ -147,7 +148,7 @@ ZForCycle* Parser::parseForCycle(TokenStream& stream, ZCodeBlock* parent, ZTreeN
     }
     else
     {
-        QList<ZTreeNode*> statements = this->parseStatement(stream, parent, cycle, context, Stmt_Function|Stmt_CycleControl, Tokenizer::Semicolon);
+        QList<ZTreeNode*> statements = this->parseStatement(stream, cycle, context, Stmt_Function|Stmt_CycleControl, Tokenizer::Semicolon);
         if (!statements.size())
         {
             qDebug("parseForCycle: expected one-line statement at line %d", token.line);
@@ -167,7 +168,7 @@ ZForCycle* Parser::parseForCycle(TokenStream& stream, ZCodeBlock* parent, ZTreeN
     return cycle;
 }
 
-QList<ZTreeNode*> Parser::parseStatement(TokenStream& stream, ZCodeBlock* parent, ZTreeNode* aux, ZStruct* context, quint64 flags, quint64 stopAtAnyOf)
+QList<ZTreeNode*> Parser::parseStatement(TokenStream& stream, ZTreeNode* parent, ZStruct* context, quint64 flags, quint64 stopAtAnyOf)
 {
     ZTreeNode* node;
     skipWhitespace(stream, true);
@@ -223,7 +224,7 @@ QList<ZTreeNode*> Parser::parseStatement(TokenStream& stream, ZCodeBlock* parent
                     for (ZTreeNode* node : nodes) delete node;
                     return empty;
                 }
-                highlightExpression(expr, parent, aux, context);
+                highlightExpression(expr, parent, context);
                 ZLocalVariable* var = new ZLocalVariable(nullptr);
                 var->hasType = false;
                 var->lineNumber = identifierToken.line;
@@ -266,7 +267,7 @@ QList<ZTreeNode*> Parser::parseStatement(TokenStream& stream, ZCodeBlock* parent
             }
             else
             {
-                highlightExpression(expr, parent, aux, context);
+                highlightExpression(expr, parent, context);
             }
             ZExecutionControl* ctl = new ZExecutionControl(nullptr);
             if (expr) expr->parent = ctl;
@@ -287,7 +288,7 @@ QList<ZTreeNode*> Parser::parseStatement(TokenStream& stream, ZCodeBlock* parent
         else if (token.value == "if" && allowCondition)
         {
             parsedTokens.append(ParserToken(token, ParserToken::Keyword));
-            ZCondition* cond = parseCondition(stream, parent, aux, context);
+            ZCondition* cond = parseCondition(stream, parent, context);
             if (!cond)
             {
                 qDebug("parseCondition: expected valid condition at line %d", token.line);
@@ -299,7 +300,7 @@ QList<ZTreeNode*> Parser::parseStatement(TokenStream& stream, ZCodeBlock* parent
         else if (token.value == "for" && allowCycle)
         {
             parsedTokens.append(ParserToken(token, ParserToken::Keyword));
-            ZForCycle* cycle = parseForCycle(stream, parent, aux, context);
+            ZForCycle* cycle = parseForCycle(stream, parent, context);
             if (!cycle)
             {
                 qDebug("parseStatement: expected valid for cycle at line %d", token.line);
@@ -326,7 +327,7 @@ QList<ZTreeNode*> Parser::parseStatement(TokenStream& stream, ZCodeBlock* parent
             if (expr)
             {
                 nodes.append(expr);
-                highlightExpression(expr, parent, aux, context);
+                highlightExpression(expr, parent, context);
 
                 if (!stream.expectToken(token, stopAtAnyOf))
                 {
@@ -383,7 +384,7 @@ QList<ZTreeNode*> Parser::parseStatement(TokenStream& stream, ZCodeBlock* parent
                             for (ZTreeNode* node : nodes) delete node;
                             return empty;
                         }
-                        highlightExpression(expr, parent, aux, context);
+                        highlightExpression(expr, parent, context);
                     }
                     else if (stream.peekToken(token) && token.type == Tokenizer::OpenSquare)
                     {
@@ -422,7 +423,7 @@ QList<ZTreeNode*> Parser::parseStatement(TokenStream& stream, ZCodeBlock* parent
                                 for (ZTreeNode* node : nodes) delete node;
                                 return empty;
                             }
-                            highlightExpression(expr, parent, aux, context);
+                            highlightExpression(expr, parent, context);
                             ftype.arrayDimensions.append(expr);
                             // check for next subscript
                             skipWhitespace(stream, true);
@@ -476,7 +477,7 @@ ZCondition::~ZCondition()
     elseBlock = nullptr;
 }
 
-ZCondition* Parser::parseCondition(TokenStream& stream, ZCodeBlock* parent, ZTreeNode* aux, ZStruct* context)
+ZCondition* Parser::parseCondition(TokenStream& stream, ZTreeNode* parent, ZStruct* context)
 {
     // "if" is already parsed here. skip it
     ZCondition* cond = new ZCondition(nullptr);
@@ -499,7 +500,7 @@ ZCondition* Parser::parseCondition(TokenStream& stream, ZCodeBlock* parent, ZTre
         delete cond;
         return nullptr;
     }
-    highlightExpression(expr, parent, aux, context);
+    highlightExpression(expr, parent, context);
     cond->condition = expr;
 
     skipWhitespace(stream, true);
@@ -511,7 +512,7 @@ ZCondition* Parser::parseCondition(TokenStream& stream, ZCodeBlock* parent, ZTre
     }
     parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
 
-    ZCodeBlock* condBlock = parseCodeBlockOrLine(stream, parent, aux, context, cond);
+    ZCodeBlock* condBlock = parseCodeBlockOrLine(stream, parent, context, cond);
     if (!condBlock)
     {
         qDebug("parseCondition: expected valid conditional code");
@@ -526,7 +527,7 @@ ZCondition* Parser::parseCondition(TokenStream& stream, ZCodeBlock* parent, ZTre
     if (stream.expectToken(token, Tokenizer::Identifier) && token.value.toLower() == "else")
     {
         parsedTokens.append(ParserToken(token, ParserToken::Keyword));
-        ZCodeBlock* elseBlock = parseCodeBlockOrLine(stream, parent, aux, context, cond);
+        ZCodeBlock* elseBlock = parseCodeBlockOrLine(stream, parent, context, cond);
         if (!elseBlock)
         {
             qDebug("parseCondition: expected valid else conditional code");
@@ -544,7 +545,7 @@ ZCondition* Parser::parseCondition(TokenStream& stream, ZCodeBlock* parent, ZTre
 
 
 
-ZCodeBlock* Parser::parseCodeBlockOrLine(TokenStream& stream, ZCodeBlock* parent, ZTreeNode* aux, ZStruct* context, ZTreeNode* recip)
+ZCodeBlock* Parser::parseCodeBlockOrLine(TokenStream& stream, ZTreeNode* parent, ZStruct* context, ZTreeNode* recip)
 {
     // now either block of code or single statement
     Tokenizer::Token token;
@@ -568,7 +569,7 @@ ZCodeBlock* Parser::parseCodeBlockOrLine(TokenStream& stream, ZCodeBlock* parent
         parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
 
         TokenStream childTs(tokens);
-        ZCodeBlock* block = parseCodeBlock(childTs, parent, aux, context);
+        ZCodeBlock* block = parseCodeBlock(childTs, parent, context);
         if (!block)
         {
             qDebug("parseCodeBlockOrLine: expected valid code block at line %d", token.line);
@@ -578,7 +579,7 @@ ZCodeBlock* Parser::parseCodeBlockOrLine(TokenStream& stream, ZCodeBlock* parent
     }
     else
     {
-        QList<ZTreeNode*> statements = parseStatement(stream, parent, aux, context, Stmt_Function|Stmt_CycleControl, Tokenizer::Semicolon);
+        QList<ZTreeNode*> statements = parseStatement(stream, parent, context, Stmt_Function|Stmt_CycleControl, Tokenizer::Semicolon);
         if (!statements.size())
         {
             qDebug("parseCodeBlockOrLine: expected one-line statement at line %d", token.line);

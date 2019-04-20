@@ -565,14 +565,13 @@ private:
 
     // this occurs in methods
     bool parseObjectMethods(ZClass* cls, ZStruct* struc);
-    // parent = outer code block
-    // aux = outer loop control (i.e. for cycle object - for local variables of the cycle itself)
+    // parent = outer code block or loop/condition
     // context = nearest outer class
-    ZCodeBlock* parseCodeBlock(TokenStream& stream, ZCodeBlock* parent, ZTreeNode* aux, ZStruct* context);
-    ZForCycle* parseForCycle(TokenStream& stream, ZCodeBlock* parent, ZTreeNode* aux, ZStruct* context);
-    ZCondition* parseCondition(TokenStream& stream, ZCodeBlock* parent, ZTreeNode* aux, ZStruct* context);
+    ZCodeBlock* parseCodeBlock(TokenStream& stream, ZTreeNode* parent, ZStruct* context);
+    ZForCycle* parseForCycle(TokenStream& stream, ZTreeNode* parent, ZStruct* context);
+    ZCondition* parseCondition(TokenStream& stream, ZTreeNode* parent, ZStruct* context);
     // magic
-    void highlightExpression(ZExpression* expr, ZCodeBlock* parent, ZTreeNode* aux, ZStruct* context);
+    void highlightExpression(ZExpression* expr, ZTreeNode* parent, ZStruct* context);
 
     enum
     {
@@ -587,8 +586,8 @@ private:
         Stmt_CycleInitializer = Stmt_Initializer|Stmt_Expression,
         Stmt_Function = Stmt_Initializer|Stmt_Expression|Stmt_Cycle|Stmt_Return|Stmt_Condition
     };
-    QList<ZTreeNode*> parseStatement(TokenStream& stream, ZCodeBlock* parent, ZTreeNode* aux, ZStruct* context, quint64 flags, quint64 stopAtAnyOf);
-    ZCodeBlock* parseCodeBlockOrLine(TokenStream& stream, ZCodeBlock* parent, ZTreeNode* aux, ZStruct* context, ZTreeNode* recip);
+    QList<ZTreeNode*> parseStatement(TokenStream& stream, ZTreeNode* parent, ZStruct* context, quint64 flags, quint64 stopAtAnyOf);
+    ZCodeBlock* parseCodeBlockOrLine(TokenStream& stream, ZTreeNode* parent, ZStruct* context, ZTreeNode* recip);
 
     // helper
     ZTreeNode* resolveType(QString name, ZStruct* context = nullptr, bool onlycontext = false);

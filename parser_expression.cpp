@@ -1541,7 +1541,7 @@ void Parser::dumpExpression(ZExpression* expr, int level)
     }
 }
 
-void Parser::highlightExpression(ZExpression* expr, ZCodeBlock* parent, ZTreeNode* aux, ZStruct* context)
+void Parser::highlightExpression(ZExpression* expr, ZTreeNode* parent, ZStruct* context)
 {
     // produces smart syntax highlighting based on various contexts:
     // parent = block that contains this expression
@@ -1566,7 +1566,7 @@ void Parser::highlightExpression(ZExpression* expr, ZCodeBlock* parent, ZTreeNod
                 }
                 else
                 {
-                    highlightExpression(leafExpr, parent, aux, context);
+                    highlightExpression(leafExpr, parent, context);
                 }
             }
             // in this case, "new" is also a keyword
@@ -1594,7 +1594,7 @@ void Parser::highlightExpression(ZExpression* expr, ZCodeBlock* parent, ZTreeNod
                 parsedTokens.append(ParserToken(leaf.token, ParserToken::Keyword));
             break;
         case ZExpressionLeaf::Expression:
-            highlightExpression(leaf.expr, parent, aux, context);
+            highlightExpression(leaf.expr, parent, context);
             break;
         case ZExpressionLeaf::Integer:
         case ZExpressionLeaf::Double:
