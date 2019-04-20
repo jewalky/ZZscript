@@ -30,7 +30,20 @@ ZCodeBlock* Parser::parseCodeBlock(TokenStream& stream, ZTreeNode* parent, ZStru
     while (true)
     {
         quint64 flags = Stmt_Function;
-        flags |= Stmt_CycleControl; // todo: check if there is a cycle in the hierarchy
+
+        // check if there are cycles along the parent chain
+        ZTreeNode* p = parent;
+        while (p)
+        {
+            if (p->type() == ZTreeNode::ForCycle || p->type() == ZTreeNode::WhileCycle)
+            {
+                flags |= Stmt_CycleControl;
+                break;
+            }
+
+            p = p->parent;
+        }
+
         QList<ZTreeNode*> rootStatements = parseStatement(stream, block, context, flags, Tokenizer::Semicolon);
 
         if (!rootStatements.size())
@@ -248,6 +261,21 @@ QList<ZTreeNode*> Parser::parseStatement(TokenStream& stream, ZTreeNode* parent,
             // done
             return nodes;
         }
+        else if ((token.value == "break" || token.value == "continue") && allowCycleControl)
+        {
+            parsedTokens.append(ParserToken(token, ParserToken::Keyword));
+            skipWhitespace(stream, true);
+            if (!stream.expectToken(token, Tokenizer::Semicolon))
+            {
+                qDebug("parseStatement: unexpected %s, expected semicolon at line %d", token.toCString(), token.line);
+                for (ZTreeNode* node : nodes) delete node;
+                return empty;
+            }
+            ZExecutionControl* ctl = new ZExecutionControl(nullptr);
+            ctl->ctlType = (token.value == "break") ? ZExecutionControl::CtlBreak : ZExecutionControl::CtlContinue;
+            nodes.append(ctl);
+            return nodes;
+        }
         else if (token.value == "return" && allowReturn)
         {
             parsedTokens.append(ParserToken(token, ParserToken::Keyword));
@@ -270,8 +298,11 @@ QList<ZTreeNode*> Parser::parseStatement(TokenStream& stream, ZTreeNode* parent,
                 highlightExpression(expr, parent, context);
             }
             ZExecutionControl* ctl = new ZExecutionControl(nullptr);
-            if (expr) expr->parent = ctl;
-            ctl->children.append(expr);
+            if (expr)
+            {
+                expr->parent = ctl;
+                ctl->children.append(expr);
+            }
             ctl->ctlType = ZExecutionControl::CtlReturn;
             nodes.append(ctl);
 
