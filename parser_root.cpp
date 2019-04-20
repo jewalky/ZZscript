@@ -144,7 +144,7 @@ ZClass* Parser::parseClass(TokenStream& stream, bool extend)
     }
     c_className = token.value;
     if (extend) c_extendName = c_className;
-    parsedTokens.append(ParserToken(token, ParserToken::TypeName));
+    parsedTokens.append(ParserToken(token, ParserToken::TypeName, nullptr, c_className));
 
     skipWhitespace(stream, true);
     if (!stream.expectToken(token, Tokenizer::Colon|Tokenizer::OpenCurly|Tokenizer::Identifier))
@@ -163,7 +163,7 @@ ZClass* Parser::parseClass(TokenStream& stream, bool extend)
             return nullptr;
         }
         c_parentName = token.value;
-        parsedTokens.append(ParserToken(token, ParserToken::TypeName));
+        parsedTokens.append(ParserToken(token, ParserToken::TypeName, nullptr, c_parentName));
 
         skipWhitespace(stream, true);
         if (!stream.expectToken(token, Tokenizer::OpenCurly|Tokenizer::Identifier))
@@ -183,7 +183,7 @@ ZClass* Parser::parseClass(TokenStream& stream, bool extend)
             return nullptr;
         }
         c_replaceName = token.value;
-        parsedTokens.append(ParserToken(token, ParserToken::TypeName));
+        parsedTokens.append(ParserToken(token, ParserToken::TypeName, nullptr, c_replaceName));
 
         skipWhitespace(stream, true);
         if (!stream.expectToken(token, Tokenizer::OpenCurly|Tokenizer::Identifier))
@@ -302,7 +302,7 @@ ZStruct* Parser::parseStruct(TokenStream& stream)
         return nullptr;
     }
     s_structName = token.value;
-    parsedTokens.append(ParserToken(token, ParserToken::TypeName));
+    parsedTokens.append(ParserToken(token, ParserToken::TypeName, nullptr, s_structName));
 
     skipWhitespace(stream, true);
     if (!stream.expectToken(token, Tokenizer::OpenCurly|Tokenizer::Identifier))
@@ -419,7 +419,7 @@ ZEnum* Parser::parseEnum(TokenStream& stream)
         return nullptr;
     }
     e_enumName = token.value;
-    parsedTokens.append(ParserToken(token, ParserToken::TypeName));
+    parsedTokens.append(ParserToken(token, ParserToken::TypeName, nullptr, e_enumName));
 
     skipWhitespace(stream, true);
     if (!stream.expectToken(token, Tokenizer::OpenCurly))

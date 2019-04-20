@@ -47,9 +47,17 @@ public:
             return QString("<Token.%1 (%2)>").arg(tokenToString(type), value);
         }
 
-        char* toCString()
+        char c[128];
+        const char* toCString()
         {
-            return toString().toUtf8().data();
+            const QByteArray& a = toString().toUtf8();
+            const char* d = a.constData();
+            int sz = a.size();
+            if (sz > 127)
+                sz = 127;
+            memset((void*)c, 0, 128);
+            memcpy((void*)c, d, sz);
+            return c;
         }
 
         void makeLower()

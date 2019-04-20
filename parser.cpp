@@ -49,10 +49,10 @@ bool Parser::parse()
         return false;
 
     //
-    QList<ZStruct*> types;
+    QList<ZTreeNode*> types;
     for (ZTreeNode* node : root->children)
     {
-        if (node->type() == ZTreeNode::Class || node->type() == ZTreeNode::Struct)
+        if (node->type() == ZTreeNode::Class || node->type() == ZTreeNode::Struct || node->type() == ZTreeNode::Enum)
             types.append(reinterpret_cast<ZStruct*>(node));
     }
     setTypeInformation(types);
@@ -184,10 +184,10 @@ void Parser::reportWarning(QString warn)
     qDebug("Parser WARN: %s", warn.toUtf8().data());
 }
 
-void Parser::setTypeInformation(QList<ZStruct*> _types)
+void Parser::setTypeInformation(QList<ZTreeNode*> _types)
 {
     types = _types;
-    for (ZStruct* struc : types)
+    for (ZTreeNode* struc : types)
     {
         // if struct is a class, we need to resolve references to other types (replaces, extends...)
         if (struc->type() != ZTreeNode::Class)
@@ -195,7 +195,7 @@ void Parser::setTypeInformation(QList<ZStruct*> _types)
         ZClass* cls = reinterpret_cast<ZClass*>(struc);
         if (!cls->extendName.isEmpty() || !cls->parentName.isEmpty() || !cls->replaceName.isEmpty())
         {
-            for (ZStruct* struc2 : types)
+            for (ZTreeNode* struc2 : types)
             {
                 if (struc2->type() != ZTreeNode::Class)
                     continue;
@@ -224,4 +224,54 @@ void Parser::setTypeInformation(QList<ZStruct*> _types)
                 qDebug("setTypeInformation: warning: parent type %s not found for class %s", cls->parentName.toUtf8().data(), cls->identifier.toUtf8().data());
         }
     }
+
+    // go through parsed tokens and find types. and resolve if needed
+    for (ParserToken& token : parsedTokens)
+    {
+        if (token.type == ParserToken::TypeName)
+        {
+            ZTreeNode* resolved = resolveType(token.referencePath);
+            if (resolved) token.reference = resolved;
+            else qDebug("setTypeInformation: warning: unresolved type %s", token.referencePath.toUtf8().data());
+        }
+    }
+}
+
+ZTreeNode* Parser::resolveType(QString name, ZStruct* context, bool onlycontext)
+{
+    if (!onlycontext && name.toLower() == "string")
+        name = "stringstruct"; // this is because of ZScript hack
+
+    // find in context if applicable
+    QList<QString> nameParts = name.split(".");
+    if (context)
+    {
+        // search for local type name
+        for (ZTreeNode* node : context->children)
+        {
+            if ((node->type() == ZTreeNode::Struct || node->type() == ZTreeNode::Class || node->type() == ZTreeNode::Enum)
+                    && node->identifier.toLower() == nameParts[0].toLower())
+            {
+                //qDebug("return item %s from context %s", node->identifier.toUtf8().data(), context->identifier.toUtf8().data());
+                return node;
+            }
+        }
+    }
+
+    if (onlycontext) return nullptr;
+
+    // search global type scope
+    for (ZTreeNode* node : types)
+    {
+        if ((node->type() == ZTreeNode::Struct || node->type() == ZTreeNode::Class || node->type() == ZTreeNode::Enum)
+                && node->identifier.toLower() == nameParts[0].toLower())
+        {
+            if (nameParts.size() == 1)
+                return node; // type found
+            else if (node->type() == ZTreeNode::Struct || node->type() == ZTreeNode::Class)
+                return resolveType(nameParts.mid(1).join("."), reinterpret_cast<ZStruct*>(node), true);
+        }
+    }
+
+    return nullptr; // not found
 }

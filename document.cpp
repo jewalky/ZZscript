@@ -2,10 +2,12 @@
 #include "document.h"
 
 #include <QTime>
+#include <QToolTip>
 
 Document::Document()
 {
     isnew = false;
+    parser = nullptr;
 }
 
 void Document::parse()
@@ -24,9 +26,10 @@ void Document::parse()
     //         - code[]
     //           ...
     //     - constants[]
-    Parser p(tokens);
-    p.parse();
-    parsedTokens = p.parsedTokens;
+    if (parser) delete parser;
+    parser = new Parser(tokens);
+    parser->parse();
+    parsedTokens = parser->parsedTokens;
 }
 
 DocumentEditor::DocumentEditor(QWidget* parent) : QPlainTextEdit(parent)
@@ -36,6 +39,7 @@ DocumentEditor::DocumentEditor(QWidget* parent) : QPlainTextEdit(parent)
 
     connect(this, SIGNAL(textChanged()), this, SLOT(onTextChanged()));
     setUndoRedoEnabled(false);
+    setMouseTracking(true);
 
     processing = false;
 }
@@ -237,4 +241,74 @@ void DocumentEditor::onTextChanged()
 void DocumentEditor::contextMenuEvent(QContextMenuEvent* event)
 {
 
+}
+
+bool DocumentEditor::event(QEvent* event)
+{
+    DocumentTab* tab = qobject_cast<DocumentTab*>(parentWidget());
+    assert(tab != nullptr);
+    Document* doc = tab->document();
+    assert(doc != nullptr);
+
+    if (event->type() == QEvent::ToolTip)
+    {
+        QHelpEvent* helpEvent = static_cast<QHelpEvent*>(event);
+        QTextCursor cursor = cursorForPosition(helpEvent->pos());
+        cursor.select(QTextCursor::WordUnderCursor);
+        if (!cursor.selectedText().isEmpty())
+        {
+            int anchor = cursor.anchor();
+            ParserToken* tok = nullptr;
+            for (ParserToken& ptok : doc->parsedTokens)
+            {
+                if (ptok.startsAt <= anchor && ptok.endsAt > anchor)
+                {
+                    tok = &ptok;
+                    break;
+                }
+            }
+
+            if (tok)
+            {
+                QToolTip::showText(helpEvent->globalPos(), makeTokenTooltip(tok));
+            }
+            else
+            {
+                QToolTip::hideText();
+            }
+        }
+        else
+        {
+            QToolTip::hideText();
+        }
+        return true;
+    }
+    return QPlainTextEdit::event(event);
+}
+
+QString DocumentEditor::makeTokenTooltip(ParserToken* tok)
+{
+    if (tok->type == ParserToken::TypeName)
+    {
+        if (tok->reference)
+        {
+            QString typeclass = "class";
+            switch (tok->reference->type())
+            {
+            case ZTreeNode::Struct:
+                typeclass = "struct";
+                break;
+            case ZTreeNode::Enum:
+                typeclass = "enum";
+                break;
+            default:
+                break;
+            }
+            return "<b>Type</b> " + typeclass + " <i>" + tok->referencePath + "</i>";
+        }
+        else
+        {
+            return "<b>Unresolved type</b> <i>" + tok->referencePath + "</i>";
+        }
+    }
 }

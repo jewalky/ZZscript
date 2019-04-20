@@ -20,6 +20,10 @@ public:
     QString contents;
     QList<Tokenizer::Token> tokens;
     QList<ParserToken> parsedTokens;
+
+private:
+    // parsed tokens and such are valid until reparse
+    Parser* parser;
 };
 
 class DocumentTab : public QWidget
@@ -54,12 +58,15 @@ public:
     explicit DocumentEditor(QWidget* parent = nullptr);
 
     void contextMenuEvent(QContextMenuEvent *event) override;
+    bool event(QEvent* event) override;
 
 public slots:
     void onTextChanged();
 
 private:
     bool processing;
+
+    QString makeTokenTooltip(ParserToken* tok);
 };
 
 #endif // DOCUMENT_H

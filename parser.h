@@ -16,13 +16,15 @@ struct ZTreeNode
         Struct,
         Field,
         Method,
-        Code,
+        CodeBlock,
         Expression,
         ForCycle,
         WhileCycle,
         Condition,
         Constant,
-        Property
+        Property,
+        LocalVariable,
+        ExecutionControl
     };
 
     ZTreeNode* parent;
@@ -94,6 +96,66 @@ struct ZField : public ZTreeNode
     QString version;
     QString deprecated;
     int lineNumber;
+
+    // children = (if any) = const array expression
+};
+
+struct ZLocalVariable : public ZTreeNode
+{
+    ZLocalVariable(ZTreeNode* p) : ZTreeNode(p) {}
+    virtual NodeType type() { return LocalVariable; }
+
+    virtual ~ZLocalVariable()
+    {
+        varType.destroy();
+    }
+
+    bool hasType; // false if "let"
+    ZCompoundType varType;
+    QList<QString> flags; // "const"
+    int lineNumber;
+
+    // children = (if any) = initializer expression
+};
+
+struct ZCodeBlock : public ZTreeNode
+{
+    ZCodeBlock(ZTreeNode* p) : ZTreeNode(p) {}
+    virtual NodeType type() { return CodeBlock; }
+
+    // code block holds ZLocalVariables, ZExpressions, and various cycles (each of them also has a code block)
+};
+
+struct ZExecutionControl : public ZTreeNode
+{
+    ZExecutionControl(ZTreeNode* p) : ZTreeNode(p) {}
+    virtual NodeType type() { return ExecutionControl; }
+
+    //
+    enum Type
+    {
+        CtlReturn,
+        CtlBreak,
+        CtlContinue
+    };
+
+    Type ctlType;
+    // children = (in case of return) = return expressions
+};
+
+struct ZForCycle : public ZTreeNode
+{
+    ZForCycle(ZTreeNode* p) : ZTreeNode(p) {}
+    virtual NodeType type() { return ForCycle; }
+
+    //
+    QList<ZTreeNode*> initializers;
+    ZExpression* condition;
+    QList<ZExpression*> step;
+
+    virtual ~ZForCycle();
+
+    // children = code block
 };
 
 struct ZConstant : public ZTreeNode
@@ -134,6 +196,8 @@ struct ZMethod : public ZTreeNode
         QString name;
         ZExpression* defaultValue;
         ZCompoundType type;
+        bool isOut;
+        bool isRef;
     };
 
     QList<ZCompoundType> returnTypes;
@@ -210,7 +274,6 @@ struct ZExpressionLeaf
         Double,
         Boolean,
         String,
-        Vector,
         Expression,
         Token // this is only for parsing
     } type;
@@ -218,8 +281,8 @@ struct ZExpressionLeaf
     Tokenizer::Token token;
     ZExpression* expr;
 
-    ZExpressionLeaf() {};
-    explicit ZExpressionLeaf(const Tokenizer::Token& t) : token(t) {}
+    ZExpressionLeaf() { expr = nullptr; };
+    explicit ZExpressionLeaf(const Tokenizer::Token& t) : token(t) { expr = nullptr; }
 };
 
 struct ZExpression : public ZTreeNode
@@ -231,6 +294,9 @@ struct ZExpression : public ZTreeNode
 
     enum Operator
     {
+        //
+        Assign,
+
         // arithmetic base
         Add,
         Sub,
@@ -245,13 +311,13 @@ struct ZExpression : public ZTreeNode
         Member,
         Call,
         Literal,
-        Array,
         Cast,
 
         // bitwise
         BitOr,
         BitAnd,
         BitShr,
+        BitShrUs,
         BitShl,
         Xor,
 
@@ -268,7 +334,18 @@ struct ZExpression : public ZTreeNode
         CmpEq,
         CmpNotEq,
         CmpSomewhatEq,
-        // todo
+
+        // post/pre increments
+        Increment, // this is used in the merge function
+        Decrement, // this is used in the merge function
+        PostIncrement, // this and the next 3 are stored into the resulting object
+        PreIncrement,
+        PostDecrement,
+        PreDecrement,
+
+        //
+        VectorInitialization,
+        ArrayInitialization,
 
         Invalid = -1
     };
@@ -323,18 +400,20 @@ struct ParserToken
         SpecialToken
     };
 
-    ParserToken(Tokenizer::Token tok, TokenType type, ZTreeNode* ref = nullptr)
+    ParserToken(Tokenizer::Token tok, TokenType type, ZTreeNode* ref = nullptr, QString refPath = "")
     {
         token = tok;
         startsAt = token.startsAt;
         endsAt = token.endsAt;
         this->type = type;
         reference = ref;
+        referencePath = refPath;
     }
 
     int startsAt;
     int endsAt;
     TokenType type;
+    QString referencePath;
     ZTreeNode* reference;
 };
 
@@ -347,7 +426,7 @@ public:
     bool parse();
     // setTypeInformation() is used pretty much to concatenate classes from included files into this one.
     // expected usage is that the outside code will call parse() on all includes, then generate combined list of types and do deep parsing.
-    void setTypeInformation(QList<ZStruct*> types);
+    void setTypeInformation(QList<ZTreeNode*> types);
     // parseClassFields and parseStructFields will parse fields and method signatures inside objects
     // (and substructs)
     bool parseClassFields(ZClass* cls) { return parseObjectFields(cls, cls); }
@@ -366,7 +445,7 @@ public:
 
 private:
     QList<Tokenizer::Token> tokens;
-    QList<ZStruct*> types;
+    QList<ZTreeNode*> types;
 
     bool skipWhitespace(TokenStream& stream, bool newline);
     bool consumeTokens(TokenStream& stream, QList<Tokenizer::Token>& out, quint64 stopAtAnyOf);
@@ -381,11 +460,29 @@ private:
     ZEnum* parseEnum(TokenStream& stream);
 
     // this occurs in the class and struct body
-    bool parseCompoundType(TokenStream& stream, ZCompoundType& type);
+    bool parseCompoundType(TokenStream& stream, ZCompoundType& type, ZStruct* context);
     bool parseObjectFields(ZClass* cls, ZStruct* struc);
 
     // this occurs in methods
     bool parseObjectMethods(ZClass* cls, ZStruct* struc);
+    // parent = outer code block
+    // aux = outer loop control (i.e. for cycle object - for local variables of the cycle itself)
+    // context = nearest outer class
+    ZCodeBlock* parseCodeBlock(TokenStream& stream, ZCodeBlock* parent, ZTreeNode* aux, ZStruct* context);
+    ZForCycle* parseForCycle(TokenStream& stream, ZCodeBlock* parent, ZTreeNode* aux, ZStruct* context);
+
+    enum
+    {
+        Stmt_Initializer = 0x0001, // int i = 1;
+        Stmt_Expression = 0x0002, // i = 1;
+        Stmt_Cycle = 0x0004, // for (int i = 1; ...)
+        Stmt_CycleControl = 0x0008, // break;
+        Stmt_Return = 0x0010 // return i;
+    };
+    QList<ZTreeNode*> parseStatement(TokenStream& stream, ZCodeBlock* parent, ZTreeNode* aux, ZStruct* context, quint64 flags, quint64 stopAtAnyOf);
+
+    // helper
+    ZTreeNode* resolveType(QString name, ZStruct* context = nullptr, bool onlycontext = false);
 };
 
 #endif // PARSER_H

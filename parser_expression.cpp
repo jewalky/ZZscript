@@ -5,8 +5,7 @@ ZExpression::~ZExpression()
 {
     for (int i = 0; i < leaves.size(); i++)
     {
-        if (leaves[i].type == ZExpressionLeaf::Expression &&
-            leaves[i].expr)
+        if (leaves[i].expr)
         {
             delete leaves[i].expr;
             leaves[i].expr = nullptr;
@@ -32,8 +31,6 @@ static QString typeFromLeaf(ZExpressionLeaf& leaf)
         return "expr";
     case ZExpressionLeaf::Invalid:
         return "invalid";
-    case ZExpressionLeaf::Vector:
-        return "vector";
     case ZExpressionLeaf::String:
         return "string";
     case ZExpressionLeaf::Token:
@@ -461,6 +458,9 @@ static bool mergeBinaryExpressions(QList<ZExpressionLeaf>& leaves, ZExpression::
         ZExpression::Operator op = ZExpression::Invalid;
         switch (token.type)
         {
+        case Tokenizer::OpAssign:
+            op = ZExpression::Assign;
+            break;
         case Tokenizer::OpAdd:
             op = ZExpression::Add;
             break;
@@ -484,6 +484,9 @@ static bool mergeBinaryExpressions(QList<ZExpressionLeaf>& leaves, ZExpression::
             break;
         case Tokenizer::OpRightShift:
             op = ZExpression::BitShr;
+            break;
+        case Tokenizer::OpRightShiftUnsigned:
+            op = ZExpression::BitShrUs;
             break;
         case Tokenizer::OpXor:
             op = ZExpression::Xor;
@@ -527,6 +530,12 @@ static bool mergeBinaryExpressions(QList<ZExpressionLeaf>& leaves, ZExpression::
         case Tokenizer::OpModulo:
             op = ZExpression::Modulo;
             break;
+        case Tokenizer::OpIncrement:
+            op = ZExpression::Increment;
+            break;
+        case Tokenizer::OpDecrement:
+            op = ZExpression::Decrement;
+            break;
         default:
             // unknown
             return false;
@@ -540,6 +549,60 @@ static bool mergeBinaryExpressions(QList<ZExpressionLeaf>& leaves, ZExpression::
 
         if (op != mergeop)
             continue;
+
+        // check increment/decrement
+        if (op == ZExpression::Increment)
+        {
+            if (rightisexpr && right)
+            {
+                ZExpressionLeaf newleaf;
+                newleaf.type = ZExpressionLeaf::Expression;
+                newleaf.expr = new ZExpression(nullptr);
+                newleaf.expr->op = ZExpression::PreIncrement;
+                newleaf.expr->leaves.append(leaves[i+1]);
+                leaves[i] = newleaf;
+                leaves.removeAt(i+1);
+                continue;
+            }
+            else if (leftisexpr && !right)
+            {
+                ZExpressionLeaf newleaf;
+                newleaf.type = ZExpressionLeaf::Expression;
+                newleaf.expr = new ZExpression(nullptr);
+                newleaf.expr->op = ZExpression::PostIncrement;
+                newleaf.expr->leaves.append(leaves[i-1]);
+                leaves[i-1] = newleaf;
+                leaves.removeAt(i);
+                i--;
+                continue;
+            }
+        }
+        else if (op == ZExpression::Decrement)
+        {
+            if (rightisexpr && right)
+            {
+                ZExpressionLeaf newleaf;
+                newleaf.type = ZExpressionLeaf::Expression;
+                newleaf.expr = new ZExpression(nullptr);
+                newleaf.expr->op = ZExpression::PreDecrement;
+                newleaf.expr->leaves.append(leaves[i+1]);
+                leaves[i] = newleaf;
+                leaves.removeAt(i+1);
+                continue;
+            }
+            else if (leftisexpr && !right)
+            {
+                ZExpressionLeaf newleaf;
+                newleaf.type = ZExpressionLeaf::Expression;
+                newleaf.expr = new ZExpression(nullptr);
+                newleaf.expr->op = ZExpression::PostDecrement;
+                newleaf.expr->leaves.append(leaves[i-1]);
+                leaves[i-1] = newleaf;
+                leaves.removeAt(i);
+                i--;
+                continue;
+            }
+        }
 
         // check unary
         if (op == ZExpression::UnaryNeg || op == ZExpression::UnaryNot ||
@@ -598,6 +661,13 @@ ZExpression* Parser::parseExpression(TokenStream& stream, quint64 stopAtAnyOf)
             if (!stream.readToken(token))
                 break;
 
+            // this is normal in case of post expressions
+            if (token.type & stopAtAnyOf)
+            {
+                stream.setPosition(stream.position()-1);
+                break;
+            }
+
             ZExpression::Operator unaryOp = ZExpression::Invalid;
             if (token.type == Tokenizer::OpSubtract)
             {
@@ -615,7 +685,54 @@ ZExpression* Parser::parseExpression(TokenStream& stream, quint64 stopAtAnyOf)
                     break;
             }
 
-            if (token.type == Tokenizer::OpenParen)
+            if (token.type == Tokenizer::OpenCurly)
+            {
+                QList<Tokenizer::Token> exprTokens;
+                if (!consumeTokens(stream, exprTokens, Tokenizer::CloseCurly))
+                    goto fail;
+
+                skipWhitespace(stream, true);
+                stream.readToken(token);
+                if (token.type != Tokenizer::CloseCurly)
+                    goto fail;
+
+                // make expression from each comma
+                ZExpressionLeaf leaf_array;
+                leaf_array.type = ZExpressionLeaf::Expression;
+                // split by commas
+                int lastPos = 0;
+                QList<ZExpression*> exprs;
+                for (int i = 0; i <= exprTokens.size(); i++)
+                {
+                    if (i == exprTokens.size() || exprTokens[i].type == Tokenizer::Comma)
+                    {
+                        // since lastPos until i
+                        QList<Tokenizer::Token> localExprTokens = exprTokens.mid(lastPos, i-lastPos);
+                        TokenStream exprStream(localExprTokens);
+                        ZExpression* subexpr = parseExpression(exprStream, 0);
+                        if (!subexpr)
+                        {
+                            for (ZExpression* expr : exprs)
+                                delete expr;
+                            goto fail;
+                        }
+                        exprs.append(subexpr);
+                        lastPos = i+1;
+                    }
+                }
+                ZExpression* subexpr = new ZExpression(nullptr);
+                for (ZExpression* expr : exprs)
+                {
+                    ZExpressionLeaf leaf;
+                    leaf.type = ZExpressionLeaf::Expression;
+                    leaf.expr = expr;
+                    subexpr->leaves.append(leaf);
+                }
+                subexpr->op = ZExpression::ArrayInitialization;
+                leaf_array.expr = subexpr;
+                leaves.append(leaf_array);
+            }
+            else if (token.type == Tokenizer::OpenParen)
             {
                 QList<Tokenizer::Token> exprTokens;
                 if (!consumeTokens(stream, exprTokens, Tokenizer::CloseParen))
@@ -626,15 +743,72 @@ ZExpression* Parser::parseExpression(TokenStream& stream, quint64 stopAtAnyOf)
                 if (token.type != Tokenizer::CloseParen)
                     goto fail;
 
-                TokenStream exprStream(exprTokens);
-                ZExpression* subexpr = parseExpression(exprStream, 0);
-                if (!subexpr)
-                    goto fail;
+                // check vector expression
+                bool hasCommas = false;
+                int level = 0;
+                for (Tokenizer::Token& tok : exprTokens)
+                {
+                    if (tok.type == Tokenizer::OpenParen)
+                        level++;
+                    if (tok.type == Tokenizer::CloseParen)
+                        level--;
+                    if (tok.type == Tokenizer::Comma && level <= 0)
+                    {
+                        hasCommas = true;
+                        break;
+                    }
+                }
 
-                ZExpressionLeaf leaf_expr;
-                leaf_expr.type = ZExpressionLeaf::Expression;
-                leaf_expr.expr = subexpr;
-                leaves.append(leaf_expr);
+                if (hasCommas)
+                {
+                    // make expression from each comma
+                    ZExpressionLeaf leaf_vector;
+                    leaf_vector.type = ZExpressionLeaf::Expression;
+                    // split by commas
+                    int lastPos = 0;
+                    QList<ZExpression*> exprs;
+                    for (int i = 0; i <= exprTokens.size(); i++)
+                    {
+                        if (i == exprTokens.size() || exprTokens[i].type == Tokenizer::Comma)
+                        {
+                            // since lastPos until i
+                            QList<Tokenizer::Token> localExprTokens = exprTokens.mid(lastPos, i-lastPos);
+                            TokenStream exprStream(localExprTokens);
+                            ZExpression* subexpr = parseExpression(exprStream, 0);
+                            if (!subexpr)
+                            {
+                                for (ZExpression* expr : exprs)
+                                    delete expr;
+                                goto fail;
+                            }
+                            exprs.append(subexpr);
+                            lastPos = i+1;
+                        }
+                    }
+                    ZExpression* subexpr = new ZExpression(nullptr);
+                    for (ZExpression* expr : exprs)
+                    {
+                        ZExpressionLeaf leaf;
+                        leaf.type = ZExpressionLeaf::Expression;
+                        leaf.expr = expr;
+                        subexpr->leaves.append(leaf);
+                    }
+                    subexpr->op = ZExpression::VectorInitialization;
+                    leaf_vector.expr = subexpr;
+                    leaves.append(leaf_vector);
+                }
+                else
+                {
+                    TokenStream exprStream(exprTokens);
+                    ZExpression* subexpr = parseExpression(exprStream, 0);
+                    if (!subexpr)
+                        goto fail;
+
+                    ZExpressionLeaf leaf_expr;
+                    leaf_expr.type = ZExpressionLeaf::Expression;
+                    leaf_expr.expr = subexpr;
+                    leaves.append(leaf_expr);
+                }
             }
             else if (token.type == Tokenizer::Integer)
             {
@@ -765,7 +939,9 @@ ZExpression* Parser::parseExpression(TokenStream& stream, quint64 stopAtAnyOf)
             }
             else if (token.type == Tokenizer::OpSubtract ||
                      token.type == Tokenizer::OpUnaryNot ||
-                     token.type == Tokenizer::OpNegate)
+                     token.type == Tokenizer::OpNegate ||
+                     token.type == Tokenizer::OpIncrement ||
+                     token.type == Tokenizer::OpDecrement)
             {
                 /* fall through */
                 stream.setPosition(stream.position()-1);
@@ -807,6 +983,7 @@ ZExpression* Parser::parseExpression(TokenStream& stream, quint64 stopAtAnyOf)
         case Tokenizer::OpOr:
         case Tokenizer::OpLeftShift:
         case Tokenizer::OpRightShift:
+        case Tokenizer::OpRightShiftUnsigned:
         case Tokenizer::OpXor:
         case Tokenizer::OpEquals:
         case Tokenizer::OpNotEquals:
@@ -818,9 +995,13 @@ ZExpression* Parser::parseExpression(TokenStream& stream, quint64 stopAtAnyOf)
         case Tokenizer::OpSpaceship:
         case Tokenizer::OpLogicalAnd:
         case Tokenizer::OpLogicalOr:
+        // unary expressions
         case Tokenizer::OpNegate:
         case Tokenizer::OpUnaryNot:
         case Tokenizer::OpModulo:
+        case Tokenizer::OpAssign:
+        case Tokenizer::OpIncrement:
+        case Tokenizer::OpDecrement:
         {
             ZExpressionLeaf leaf_op;
             leaf_op.type = ZExpressionLeaf::Token;
@@ -938,6 +1119,14 @@ ZExpression* Parser::parseExpression(TokenStream& stream, quint64 stopAtAnyOf)
         }
     }
 
+    // post increment
+    if (!mergeBinaryExpressions(leaves, ZExpression::Increment, false)) goto fail;
+    // post decrement
+    if (!mergeBinaryExpressions(leaves, ZExpression::Decrement, false)) goto fail;
+    // pre increment
+    if (!mergeBinaryExpressions(leaves, ZExpression::Increment, true)) goto fail;
+    // pre decrement
+    if (!mergeBinaryExpressions(leaves, ZExpression::Decrement, true)) goto fail;
     if (!mergeBinaryExpressions(leaves, ZExpression::UnaryNeg, true)) goto fail;
     if (!mergeBinaryExpressions(leaves, ZExpression::UnaryNot, true)) goto fail;
     if (!mergeBinaryExpressions(leaves, ZExpression::UnaryMinus, true)) goto fail;
@@ -961,6 +1150,7 @@ ZExpression* Parser::parseExpression(TokenStream& stream, quint64 stopAtAnyOf)
     if (!mergeBinaryExpressions(leaves, ZExpression::CmpSpaceship)) goto fail;
     if (!mergeBinaryExpressions(leaves, ZExpression::LogicalAnd)) goto fail;
     if (!mergeBinaryExpressions(leaves, ZExpression::LogicalOr)) goto fail;
+    if (!mergeBinaryExpressions(leaves, ZExpression::Assign)) goto fail;
 
     // using "goto fail" instead of return-whatever, guarantees that all expressions are deleted correctly
     goto finish;
@@ -1028,6 +1218,8 @@ static QString operatorToString(ZExpression::Operator op)
     {
     case ZExpression::Invalid:
         return "invalid";
+    case ZExpression::Assign:
+        return "assign";
     case ZExpression::Add:
         return "add";
     case ZExpression::Sub:
@@ -1036,6 +1228,10 @@ static QString operatorToString(ZExpression::Operator op)
         return "mul";
     case ZExpression::Div:
         return "div";
+    case ZExpression::Decrement:
+        return "decrement";
+    case ZExpression::Increment:
+        return "increment";
     case ZExpression::UnaryMinus:
         return "unary_sub";
     case ZExpression::UnaryNeg:
@@ -1078,6 +1274,10 @@ static QString operatorToString(ZExpression::Operator op)
         return "logical_and";
     case ZExpression::LogicalOr:
         return "logical_or";
+    case ZExpression::ArrayInitialization:
+        return "array";
+    case ZExpression::VectorInitialization:
+        return "vector";
     default:
         return "unknown "+QString::number(op);
     }
