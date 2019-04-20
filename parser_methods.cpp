@@ -326,7 +326,6 @@ QList<ZTreeNode*> Parser::parseStatement(TokenStream& stream, ZCodeBlock* parent
             }
             else if (allowInitializer)
             {
-                qDebug("expression failed (token %s)", token.toCString());
                 // [const] <type> <name> [= <value>] [, <name> [= <value>] ...]
                 bool isConst = false;
                 if (token.value == "const")

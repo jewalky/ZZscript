@@ -397,6 +397,7 @@ struct ZExpression : public ZTreeNode
         Call,
         Literal,
         Cast,
+        ArraySubscript,
 
         // bitwise
         BitOr,

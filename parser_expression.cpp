@@ -1038,6 +1038,61 @@ ZExpression* Parser::parseExpression(TokenStream& stream, quint64 stopAtAnyOf)
                 skipleft = true;
             break;
         }
+        case Tokenizer::OpenSquare: // array access
+        {
+            ZExpressionLeaf& last = leaves.last();
+            bool validForArray = (last.type == ZExpressionLeaf::Identifier || last.type == ZExpressionLeaf::Expression);
+            if (!validForArray) goto fail; // really bad coding
+            //
+            // read some repeating [] expressions until we find something that isn't a [
+
+            QList<ZExpressionLeaf> arrsubscripts;
+            while (true)
+            {
+                // read in subscript
+                QList<Tokenizer::Token> subTokens;
+                if (!consumeTokens(stream, subTokens, Tokenizer::CloseSquare))
+                {
+                    for (int i = 0; i < arrsubscripts.size(); i++)
+                        delete arrsubscripts[i].expr;
+                    goto fail;
+                }
+                //
+                // make sure we did find a close square
+                if (!stream.expectToken(token, Tokenizer::CloseSquare))
+                {
+                    for (int i = 0; i < arrsubscripts.size(); i++)
+                        delete arrsubscripts[i].expr;
+                    goto fail;
+                }
+                // parse expression under this subscript
+                TokenStream exprStream(subTokens);
+                ZExpression* expr = parseExpression(exprStream, 0);
+                if (!expr)
+                {
+                    for (int i = 0; i < arrsubscripts.size(); i++)
+                        delete arrsubscripts[i].expr;
+                    goto fail;
+                }
+                // check for next subscript
+                skipWhitespace(stream, true);
+                if (stream.peekToken(token) && token.type == Tokenizer::OpenSquare)
+                    continue;
+                break;
+            }
+            // read multiple subscripts, store
+            ZExpression* arrexpr = new ZExpression(nullptr);
+            arrexpr->op = ZExpression::ArraySubscript;
+            arrexpr->leaves.append(last);
+            for (int i = 0; i < arrsubscripts.size(); i++)
+                arrexpr->leaves.append(arrsubscripts[i]);
+            ZExpressionLeaf arrlleaf;
+            arrlleaf.type = ZExpressionLeaf::Expression;
+            arrlleaf.expr = arrexpr;
+            last = arrlleaf;
+            skipleft = true;
+            break;
+        }
         case Tokenizer::OpenParen: // function call
         {
             ZExpressionLeaf& last = leaves.last();
@@ -1054,7 +1109,11 @@ ZExpression* Parser::parseExpression(TokenStream& stream, quint64 stopAtAnyOf)
                 // read in expression
                 QList<Tokenizer::Token> exprTokens;
                 if (!consumeTokens(stream, exprTokens, Tokenizer::CloseParen|Tokenizer::Comma))
+                {
+                    for (int i = 0; i < callargs.size(); i++)
+                        delete callargs[i].expr;
                     goto fail;
+                }
 
                 bool nonwhitespace = false;
                 for (int i = 0; i < exprTokens.size(); i++)
