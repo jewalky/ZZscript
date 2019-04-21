@@ -54,7 +54,7 @@ bool Parser::parseRoot(TokenStream& stream)
                 }
                 parsedTokens.append(ParserToken(token, ParserToken::Preprocessor));
 
-                ZInclude* incl = new ZInclude(root);
+                QSharedPointer<ZInclude> incl = QSharedPointer<ZInclude>(new ZInclude(root));
                 incl->location = token.value;
                 incl->isValid = true;
                 root->children.append(incl);
@@ -89,7 +89,7 @@ bool Parser::parseRoot(TokenStream& stream)
                     }
                     parsedTokens.append(ParserToken(token, ParserToken::Keyword));
                 }
-                ZClass* cls = parseClass(stream, isExtend);
+                QSharedPointer<ZClass> cls = parseClass(stream, isExtend);
                 if (!cls)
                     return false;
                 cls->parent = root;
@@ -98,7 +98,7 @@ bool Parser::parseRoot(TokenStream& stream)
             else if (token.value == "struct")
             {
                 parsedTokens.append(ParserToken(token, ParserToken::Keyword));
-                ZStruct* struc = parseStruct(stream);
+                QSharedPointer<ZStruct> struc = parseStruct(stream);
                 if (!struc)
                     return false;
                 struc->parent = root;
@@ -107,7 +107,7 @@ bool Parser::parseRoot(TokenStream& stream)
             else if (token.value == "enum")
             {
                 parsedTokens.append(ParserToken(token, ParserToken::Keyword));
-                ZEnum* enm = parseEnum(stream);
+                QSharedPointer<ZEnum> enm = parseEnum(stream);
                 if (!enm)
                     return false;
                 enm->parent = root;
@@ -121,7 +121,7 @@ bool Parser::parseRoot(TokenStream& stream)
     }
 }
 
-ZClass* Parser::parseClass(TokenStream& stream, bool extend)
+QSharedPointer<ZClass> Parser::parseClass(TokenStream& stream, bool extend)
 {
     QString c_className;
     QString c_parentName;
@@ -267,7 +267,7 @@ ZClass* Parser::parseClass(TokenStream& stream, bool extend)
         }
         parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
 
-        ZClass* cls = new ZClass(nullptr);
+        QSharedPointer<ZClass> cls = QSharedPointer<ZClass>(new ZClass(nullptr));
         cls->flags = c_flags;
         cls->identifier = c_className;
         cls->parentName = c_parentName;
@@ -279,7 +279,7 @@ ZClass* Parser::parseClass(TokenStream& stream, bool extend)
         cls->isValid = true;
 
         // initialize "self" variable
-        ZLocalVariable* self = new ZLocalVariable(cls);
+        QSharedPointer<ZLocalVariable> self = QSharedPointer<ZLocalVariable>(new ZLocalVariable(cls));
         self->varType.type = cls->identifier;
         self->varType.reference = cls;
         self->identifier = "self";
@@ -294,7 +294,7 @@ ZClass* Parser::parseClass(TokenStream& stream, bool extend)
     }
 }
 
-ZStruct* Parser::parseStruct(TokenStream& stream)
+QSharedPointer<ZStruct> Parser::parseStruct(TokenStream& stream)
 {
     QString s_structName;
     QList<QString> s_flags;
@@ -393,7 +393,7 @@ ZStruct* Parser::parseStruct(TokenStream& stream)
         }
         parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
 
-        ZStruct* struc = new ZStruct(nullptr);
+        QSharedPointer<ZStruct> struc = QSharedPointer<ZStruct>(new ZStruct(nullptr));
         struc->flags = s_flags;
         struc->identifier = s_structName;
         struc->tokens = classTokens;
@@ -402,7 +402,7 @@ ZStruct* Parser::parseStruct(TokenStream& stream)
         struc->isValid = true;
 
         // initialize "self" variable
-        ZLocalVariable* self = new ZLocalVariable(struc);
+        QSharedPointer<ZLocalVariable> self = QSharedPointer<ZLocalVariable>(new ZLocalVariable(struc));
         self->varType.type = struc->identifier;
         self->varType.reference = struc;
         self->identifier = "self";
@@ -417,10 +417,10 @@ ZStruct* Parser::parseStruct(TokenStream& stream)
     }
 }
 
-ZEnum* Parser::parseEnum(TokenStream& stream)
+QSharedPointer<ZEnum> Parser::parseEnum(TokenStream& stream)
 {
     QString e_enumName;
-    QList< QPair<QString, ZExpression*> > e_values;
+    QList< QPair<QString, QSharedPointer<ZExpression>> > e_values;
 
     // enum <name>
     // {
@@ -454,8 +454,6 @@ ZEnum* Parser::parseEnum(TokenStream& stream)
         // get name
         if (!stream.expectToken(token, Tokenizer::Identifier|Tokenizer::CloseCurly))
         {
-            for (auto& e : e_values)
-                delete e.second;
             qDebug("parseEnum: unexpected %s, expected closing brace or item name at line %d", token.toCString(), token.line);
             return nullptr;
         }
@@ -468,8 +466,6 @@ ZEnum* Parser::parseEnum(TokenStream& stream)
         skipWhitespace(stream, true);
         if (!stream.expectToken(token, Tokenizer::Comma|Tokenizer::OpAssign|Tokenizer::CloseCurly))
         {
-            for (auto& e : e_values)
-                delete e.second;
             qDebug("parseEnum: unexpected %s, expected closing brace, comma or value assignment at line %d", token.toCString(), token.line);
             return nullptr;
         }
@@ -481,22 +477,18 @@ ZEnum* Parser::parseEnum(TokenStream& stream)
         if (token.type == Tokenizer::OpAssign)
         {
             skipWhitespace(stream, true);
-            ZExpression* expr = parseExpression(stream, Tokenizer::Comma|Tokenizer::CloseCurly);
+            QSharedPointer<ZExpression> expr = parseExpression(stream, Tokenizer::Comma|Tokenizer::CloseCurly);
             if (!expr)
             {
-                for (auto& e : e_values)
-                    delete e.second;
                 qDebug("parseEnum: failed parsing expression at line %d", token.line);
                 return nullptr;
             }
 
-            e_values.append(QPair<QString, ZExpression*>(enum_id, expr));
+            e_values.append(QPair<QString, QSharedPointer<ZExpression>>(enum_id, expr));
 
             skipWhitespace(stream, true);
             if (!stream.expectToken(token, Tokenizer::Comma|Tokenizer::CloseCurly))
             {
-                for (auto& e : e_values)
-                    delete e.second;
                 qDebug("parseEnum: unexpected %s, expected closing brace or comma at line %d", token.toCString(), token.line);
                 return nullptr;
             }
@@ -516,7 +508,7 @@ ZEnum* Parser::parseEnum(TokenStream& stream)
         stream.setPosition(cpos);
     else parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
 
-    ZEnum* enm = new ZEnum(nullptr);
+    QSharedPointer<ZEnum> enm = QSharedPointer<ZEnum>(new ZEnum(nullptr));
     enm->identifier = e_enumName;
     enm->values = e_values;
     // this is so that destructor works correctly

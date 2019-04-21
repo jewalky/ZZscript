@@ -42,9 +42,9 @@ void Document::reparse()
     if (!parser) return;
 
     // get current types
-    QList<ZTreeNode*> allTypes = parser->getTypeInformation();
-    QList<ZTreeNode*> ownTypes = parser->getOwnTypeInformation();
-    for (ZTreeNode* ownType : ownTypes)
+    QList<QSharedPointer<ZTreeNode>> allTypes = parser->getTypeInformation();
+    QList<QSharedPointer<ZTreeNode>> ownTypes = parser->getOwnTypeInformation();
+    for (QSharedPointer<ZTreeNode> ownType : ownTypes)
         allTypes.removeAll(ownType);
     delete parser;
     Tokenizer tok(contents);
@@ -54,28 +54,28 @@ void Document::reparse()
     allTypes.append(parser->getOwnTypeInformation());
     parser->setTypeInformation(allTypes);
 
-    for (ZTreeNode* node : parser->root->children)
+    for (QSharedPointer<ZTreeNode> node : parser->root->children)
     {
         if (node->type() == ZTreeNode::Class)
         {
-            parser->parseClassFields(reinterpret_cast<ZClass*>(node));
+            parser->parseClassFields(node.dynamicCast<ZClass>());
         }
         else if (node->type() == ZTreeNode::Struct)
         {
-            parser->parseStructFields(reinterpret_cast<ZStruct*>(node));
+            parser->parseStructFields(node.dynamicCast<ZStruct>());
         }
     }
 
     // later this also needs to be done outside of the parser after all fields are processed
-    for (ZTreeNode* node : parser->root->children)
+    for (QSharedPointer<ZTreeNode> node : parser->root->children)
     {
         if (node->type() == ZTreeNode::Class)
         {
-            parser->parseClassMethods(reinterpret_cast<ZClass*>(node));
+            parser->parseClassMethods(node.dynamicCast<ZClass>());
         }
         else if (node->type() == ZTreeNode::Struct)
         {
-            parser->parseStructMethods(reinterpret_cast<ZStruct*>(node));
+            parser->parseStructMethods(node.dynamicCast<ZStruct>());
         }
     }
 
@@ -459,7 +459,7 @@ QString DocumentEditor::makeTokenTooltip(ParserToken* tok)
         if (tok->reference)
         {
             QString typelocal = "<b>Local</b>";
-            ZLocalVariable* local = reinterpret_cast<ZLocalVariable*>(tok->reference);
+            QSharedPointer<ZLocalVariable> local = tok->reference.dynamicCast<ZLocalVariable>();
             QString addauto = local->hasType ? "" : "auto ";
             QString typeclass = " (unresolved "+addauto+"type) ";
             if (local->parent && local->parent->type() == ZTreeNode::Method)
@@ -468,7 +468,7 @@ QString DocumentEditor::makeTokenTooltip(ParserToken* tok)
             ZCompoundType vtype = local->varType;
             if (!local->hasType && local->children.size() && local->children[0]->type() == ZTreeNode::Expression)
             {
-                ZExpression* localExpr = reinterpret_cast<ZExpression*>(local->children[0]);
+                ZExpression* localExpr = reinterpret_cast<ZExpression*>(local->children[0].get());
                 vtype = localExpr->resultType;
             }
             if (vtype.reference)

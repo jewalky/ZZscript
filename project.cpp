@@ -86,11 +86,11 @@ bool Project::parseProject()
             // find and add includes
             if (f.parser && f.parser->root)
             {
-                for (ZTreeNode* node : f.parser->root->children)
+                for (QSharedPointer<ZTreeNode> node : f.parser->root->children)
                 {
                     if (node->type() == ZTreeNode::Include)
                     {
-                        ZInclude* inc = reinterpret_cast<ZInclude*>(node);
+                        QSharedPointer<ZInclude> inc = node.dynamicCast<ZInclude>();
                         includeTree.append(inc->location);
                     }
                 }
@@ -134,11 +134,11 @@ bool Project::parseProject()
                     // find and add includes
                     if (f.parser && f.parser->root)
                     {
-                        for (ZTreeNode* node : f.parser->root->children)
+                        for (QSharedPointer<ZTreeNode> node : f.parser->root->children)
                         {
                             if (node->type() == ZTreeNode::Include)
                             {
-                                ZInclude* inc = reinterpret_cast<ZInclude*>(node);
+                                QSharedPointer<ZInclude> inc = node.dynamicCast<ZInclude>();
                                 includeTree.append(inc->location);
                             }
                         }
@@ -162,11 +162,11 @@ bool Project::parseProject()
 
 bool Project::parseProjectClasses()
 {
-    QList<ZTreeNode*> allTypes;
+    QList<QSharedPointer<ZTreeNode>> allTypes;
     for (ProjectFile& f : files)
     {
         if (!f.parser) continue;
-        QList<ZTreeNode*> localTypes = f.parser->getOwnTypeInformation();
+        QList<QSharedPointer<ZTreeNode>> localTypes = f.parser->getOwnTypeInformation();
         allTypes.append(localTypes);
     }
 
@@ -176,28 +176,28 @@ bool Project::parseProjectClasses()
         if (!f.parser) continue;
         f.parser->setTypeInformation(allTypes);
 
-        for (ZTreeNode* node : f.parser->root->children)
+        for (QSharedPointer<ZTreeNode> node : f.parser->root->children)
         {
             if (node->type() == ZTreeNode::Class)
             {
-                allok &= f.parser->parseClassFields(reinterpret_cast<ZClass*>(node));
+                allok &= f.parser->parseClassFields(node.dynamicCast<ZClass>());
             }
             else if (node->type() == ZTreeNode::Struct)
             {
-                allok &= f.parser->parseStructFields(reinterpret_cast<ZStruct*>(node));
+                allok &= f.parser->parseStructFields(node.dynamicCast<ZStruct>());
             }
         }
 
         // later this also needs to be done outside of the parser after all fields are processed
-        for (ZTreeNode* node : f.parser->root->children)
+        for (QSharedPointer<ZTreeNode> node : f.parser->root->children)
         {
             if (node->type() == ZTreeNode::Class)
             {
-                allok &= f.parser->parseClassMethods(reinterpret_cast<ZClass*>(node));
+                allok &= f.parser->parseClassMethods(node.dynamicCast<ZClass>());
             }
             else if (node->type() == ZTreeNode::Struct)
             {
-                allok &= f.parser->parseStructMethods(reinterpret_cast<ZStruct*>(node));
+                allok &= f.parser->parseStructMethods(node.dynamicCast<ZStruct>());
             }
         }
     }

@@ -2,10 +2,14 @@
 #define PARSER_H
 
 #include <QPair>
+#include <QPointer>
+#include <QSharedPointer>
 #include "tokenizer.h"
 
-struct ZTreeNode
+class ZTreeNode : public QObject
 {
+    Q_OBJECT
+public:
     enum NodeType
     {
         Generic,
@@ -28,22 +32,25 @@ struct ZTreeNode
         SystemType
     };
 
-    ZTreeNode* parent;
+    QSharedPointer<ZTreeNode> parent;
     QString identifier;
-    QList<ZTreeNode*> children;
+    QList<QSharedPointer<ZTreeNode>> children;
     bool isValid;
     QString error;
 
-    explicit ZTreeNode(ZTreeNode* p) { parent = p; isValid = false; }
+    explicit ZTreeNode(QSharedPointer<ZTreeNode> p) { parent = p; isValid = false; }
     virtual ~ZTreeNode();
 
     virtual NodeType type() { return Generic; }
 };
 
 class Parser;
-struct ZFileRoot : public ZTreeNode
+class ZFileRoot : public ZTreeNode
 {
-    ZFileRoot(ZTreeNode* p) : ZTreeNode(p) {}
+    Q_OBJECT
+public:
+
+    ZFileRoot(QSharedPointer<ZTreeNode> p) : ZTreeNode(p) {}
     virtual NodeType type() { return FileRoot; }
 
     // this is the API version to use for parsing and compat separation
@@ -56,9 +63,12 @@ struct ZFileRoot : public ZTreeNode
     Parser* parser;
 };
 
-struct ZInclude : public ZTreeNode
+class ZInclude : public ZTreeNode
 {
-    ZInclude(ZTreeNode* p) : ZTreeNode(p)
+    Q_OBJECT
+public:
+
+    ZInclude(QSharedPointer<ZTreeNode> p) : ZTreeNode(p)
     {
         reference = nullptr;
     }
@@ -66,14 +76,29 @@ struct ZInclude : public ZTreeNode
     virtual NodeType type() { return Include; }
 
     QString location;
-    ZFileRoot* reference;
+    QSharedPointer<ZFileRoot> reference;
 };
 
-struct ZExpression;
-struct ZStruct;
-struct ZSystemType : public ZTreeNode
+class ZExpression;
+class ZStruct;
+class ZSystemType : public ZTreeNode
 {
-    ZSystemType(ZTreeNode* p) : ZTreeNode(p) {}
+    Q_OBJECT
+public:
+
+    ZSystemType(QSharedPointer<ZTreeNode> p) : ZTreeNode(p) {}
+    ZSystemType(const ZSystemType& other) : ZTreeNode(nullptr)
+    {
+        (*this)=other;
+    }
+
+    ZSystemType& operator=(const ZSystemType& other)
+    {
+        kind = other.kind;
+        size = other.size;
+        replaceType = other.replaceType;
+        return *this;
+    }
 
     virtual NodeType type() { return SystemType; }
 
@@ -105,9 +130,9 @@ struct ZSystemType : public ZTreeNode
 struct ZCompoundType
 {
     QString type;
-    ZTreeNode* reference;
+    QSharedPointer<ZTreeNode> reference;
     QList<ZCompoundType> arguments; // example: Array<Actor>
-    QList<ZExpression*> arrayDimensions; // example: string s[8]; or string s[SIZE];
+    QList<QSharedPointer<ZExpression>> arrayDimensions; // example: string s[8]; or string s[SIZE];
 
     ZCompoundType()
     {
@@ -116,11 +141,7 @@ struct ZCompoundType
 
     void destroy()
     {
-        for (ZExpression* expr : arrayDimensions)
-            delete expr;
-        arrayDimensions.clear();
-        for (ZCompoundType& t : arguments)
-            t.destroy();
+        // not needed anymore
     }
 
     bool isSystem()
@@ -129,9 +150,12 @@ struct ZCompoundType
     }
 };
 
-struct ZField : public ZTreeNode
+class ZField : public ZTreeNode
 {
-    ZField(ZTreeNode* p) : ZTreeNode(p) {}
+    Q_OBJECT
+public:
+
+    ZField(QSharedPointer<ZTreeNode> p) : ZTreeNode(p) {}
     virtual NodeType type() { return Field; }
 
     virtual ~ZField()
@@ -148,9 +172,12 @@ struct ZField : public ZTreeNode
     // children = (if any) = const array expression
 };
 
-struct ZLocalVariable : public ZTreeNode
+class ZLocalVariable : public ZTreeNode
 {
-    ZLocalVariable(ZTreeNode* p) : ZTreeNode(p) {}
+    Q_OBJECT
+public:
+
+    ZLocalVariable(QSharedPointer<ZTreeNode> p) : ZTreeNode(p) {}
     virtual NodeType type() { return LocalVariable; }
 
     virtual ~ZLocalVariable()
@@ -166,17 +193,23 @@ struct ZLocalVariable : public ZTreeNode
     // children = (if any) = initializer expression
 };
 
-struct ZCodeBlock : public ZTreeNode
+class ZCodeBlock : public ZTreeNode
 {
-    ZCodeBlock(ZTreeNode* p) : ZTreeNode(p) {}
+    Q_OBJECT
+public:
+
+    ZCodeBlock(QSharedPointer<ZTreeNode> p) : ZTreeNode(p) {}
     virtual NodeType type() { return CodeBlock; }
 
     // code block holds ZLocalVariables, ZExpressions, and various cycles (each of them also has a code block)
 };
 
-struct ZExecutionControl : public ZTreeNode
+class ZExecutionControl : public ZTreeNode
 {
-    ZExecutionControl(ZTreeNode* p) : ZTreeNode(p) {}
+    Q_OBJECT
+public:
+
+    ZExecutionControl(QSharedPointer<ZTreeNode> p) : ZTreeNode(p) {}
     virtual NodeType type() { return ExecutionControl; }
 
     //
@@ -191,9 +224,12 @@ struct ZExecutionControl : public ZTreeNode
     // children = (in case of return) = return expressions
 };
 
-struct ZForCycle : public ZTreeNode
+class ZForCycle : public ZTreeNode
 {
-    ZForCycle(ZTreeNode* p) : ZTreeNode(p)
+    Q_OBJECT
+public:
+
+    ZForCycle(QSharedPointer<ZTreeNode> p) : ZTreeNode(p)
     {
         condition = nullptr;
     }
@@ -201,18 +237,21 @@ struct ZForCycle : public ZTreeNode
     virtual NodeType type() { return ForCycle; }
 
     //
-    QList<ZTreeNode*> initializers;
-    ZExpression* condition;
-    QList<ZExpression*> step;
+    QList<QSharedPointer<ZTreeNode>> initializers;
+    QSharedPointer<ZExpression> condition;
+    QList<QSharedPointer<ZExpression>> step;
 
     virtual ~ZForCycle();
 
     // children = code block
 };
 
-struct ZCondition : public ZTreeNode
+class ZCondition : public ZTreeNode
 {
-    ZCondition(ZTreeNode* p) : ZTreeNode(p)
+    Q_OBJECT
+public:
+
+    ZCondition(QSharedPointer<ZTreeNode> p) : ZTreeNode(p)
     {
         condition = nullptr;
         elseBlock = nullptr;
@@ -221,26 +260,32 @@ struct ZCondition : public ZTreeNode
     virtual NodeType type() { return Condition; }
 
     //
-    ZExpression* condition;
+    QSharedPointer<ZExpression> condition;
 
     //
-    ZTreeNode* elseBlock;
+    QSharedPointer<ZTreeNode> elseBlock;
 
     virtual ~ZCondition();
 };
 
-struct ZConstant : public ZTreeNode
+class ZConstant : public ZTreeNode
 {
-    ZConstant(ZTreeNode* p) : ZTreeNode(p) {}
+    Q_OBJECT
+public:
+
+    ZConstant(QSharedPointer<ZTreeNode> p) : ZTreeNode(p) {}
     virtual NodeType type() { return Constant; }
 
     // children = expression
     int lineNumber;
 };
 
-struct ZProperty : public ZTreeNode
+class ZProperty : public ZTreeNode
 {
-    ZProperty(ZTreeNode* p) : ZTreeNode(p) {}
+    Q_OBJECT
+public:
+
+    ZProperty(QSharedPointer<ZTreeNode> p) : ZTreeNode(p) {}
     virtual NodeType type() { return Property; }
 
     // identifier = prop name
@@ -249,21 +294,21 @@ struct ZProperty : public ZTreeNode
     int lineNumber;
 };
 
-struct ZMethod : public ZTreeNode
+class ZMethod : public ZTreeNode
 {
-    ZMethod(ZTreeNode* p) : ZTreeNode(p) {}
+    Q_OBJECT
+public:
+
+    ZMethod(QSharedPointer<ZTreeNode> p) : ZTreeNode(p) {}
     virtual NodeType type() { return Method; }
 
     virtual ~ZMethod()
     {
-        for (ZCompoundType& rt : returnTypes)
-            rt.destroy();
-        for (ZLocalVariable* arg : arguments)
-            delete arg;
+        // not needed anymore
     }
 
     QList<ZCompoundType> returnTypes;
-    QList<ZLocalVariable*> arguments;
+    QList<QSharedPointer<ZLocalVariable>> arguments;
     QList<QString> flags;
     QString version;
     QString deprecated;
@@ -275,9 +320,12 @@ struct ZMethod : public ZTreeNode
     QList<Tokenizer::Token> tokens;
 };
 
-struct ZStruct : public ZTreeNode
+class ZStruct : public ZTreeNode
 {
-    ZStruct(ZTreeNode* p) : ZTreeNode(p) { self = nullptr; }
+    Q_OBJECT
+public:
+
+    ZStruct(QSharedPointer<ZTreeNode> p) : ZTreeNode(p) { self = nullptr; }
     virtual ~ZStruct();
     virtual NodeType type() { return Struct; }
 
@@ -288,14 +336,17 @@ struct ZStruct : public ZTreeNode
     QList<Tokenizer::Token> tokens;
     int lineNumber;
 
-    ZLocalVariable* self;
+    QSharedPointer<ZLocalVariable> self;
 
     // children = ZField, ZConstant, ZProperty.. (for classes)
 };
 
-struct ZClass : public ZStruct
+class ZClass : public ZStruct
 {
-    ZClass(ZTreeNode* p) : ZStruct(p)
+    Q_OBJECT
+public:
+
+    ZClass(QSharedPointer<ZTreeNode> p) : ZStruct(p)
     {
         parentReference = extendReference = replaceReference = nullptr;
     }
@@ -306,13 +357,13 @@ struct ZClass : public ZStruct
     QString extendName;
     QString replaceName;
 
-    ZClass* parentReference;
-    ZClass* extendReference;
-    ZClass* replaceReference;
+    QSharedPointer<ZClass> parentReference;
+    QSharedPointer<ZClass> extendReference;
+    QSharedPointer<ZClass> replaceReference;
 
-    QList<ZClass*> extensions;
-    QList<ZClass*> childrenReferences;
-    QList<ZClass*> replacedByReferences; // this is used later for checking
+    QList<QSharedPointer<ZClass>> extensions;
+    QList<QSharedPointer<ZClass>> childrenReferences;
+    QList<QSharedPointer<ZClass>> replacedByReferences; // this is used later for checking
 
     // todo: class and actor magic:
     // - flags (actor flags)
@@ -344,15 +395,18 @@ struct ZExpressionLeaf
     } type;
 
     Tokenizer::Token token;
-    ZExpression* expr;
+    QSharedPointer<ZExpression> expr;
 
     ZExpressionLeaf() { expr = nullptr; };
     explicit ZExpressionLeaf(const Tokenizer::Token& t) : token(t) { expr = nullptr; }
 };
 
-struct ZExpression : public ZTreeNode
+class ZExpression : public ZTreeNode
 {
-    ZExpression(ZTreeNode* p) : ZTreeNode(p)
+    Q_OBJECT
+public:
+
+    ZExpression(QSharedPointer<ZTreeNode> p) : ZTreeNode(p)
     {
         op = Invalid;
         assign = false;
@@ -441,13 +495,16 @@ struct ZExpression : public ZTreeNode
     bool evaluateLeaf(ZExpressionLeaf& in, ZExpressionLeaf& out, QString& type);
 };
 
-struct ZEnum : public ZTreeNode
+class ZEnum : public ZTreeNode
 {
-    ZEnum(ZTreeNode* p) : ZTreeNode(p) {}
+    Q_OBJECT
+public:
+
+    ZEnum(QSharedPointer<ZTreeNode> p) : ZTreeNode(p) {}
     virtual NodeType type() { return Enum; }
 
     QString version;
-    QList< QPair<QString, ZExpression*> > values;
+    QList< QPair<QString, QSharedPointer<ZExpression>> > values;
     int lineNumber;
 };
 
@@ -482,7 +539,7 @@ struct ParserToken
         SpecialToken
     };
 
-    ParserToken(Tokenizer::Token tok, TokenType type, ZTreeNode* ref = nullptr, QString refPath = "")
+    ParserToken(Tokenizer::Token tok, TokenType type, QSharedPointer<ZTreeNode> ref = nullptr, QString refPath = "")
     {
         token = tok;
         startsAt = token.startsAt;
@@ -496,7 +553,7 @@ struct ParserToken
     int endsAt;
     TokenType type;
     QString referencePath;
-    ZTreeNode* reference;
+    QSharedPointer<ZTreeNode> reference;
 };
 
 class Parser
@@ -508,60 +565,60 @@ public:
     bool parse();
     // setTypeInformation() is used pretty much to concatenate classes from included files into this one.
     // expected usage is that the outside code will call parse() on all includes, then generate combined list of types and do deep parsing.
-    void setTypeInformation(QList<ZTreeNode*> types);
+    void setTypeInformation(QList<QSharedPointer<ZTreeNode>> types);
     // parseClassFields and parseStructFields will parse fields and method signatures inside objects
     // (and substructs)
-    bool parseClassFields(ZClass* cls) { return parseObjectFields(cls, cls); }
-    bool parseStructFields(ZStruct* struc) { return parseObjectFields(nullptr, struc); }
+    bool parseClassFields(QSharedPointer<ZClass> cls) { return parseObjectFields(cls, cls); }
+    bool parseStructFields(QSharedPointer<ZStruct> struc) { return parseObjectFields(nullptr, struc); }
     // parseClassMethods and parseStructMethods will parse method bodies (knowing all possible types and fields at this point)
-    bool parseClassMethods(ZClass* cls) { return parseObjectMethods(cls, cls); }
-    bool parseStructMethods(ZStruct* struc) { return parseObjectMethods(nullptr, struc); }
+    bool parseClassMethods(QSharedPointer<ZClass> cls) { return parseObjectMethods(cls, cls); }
+    bool parseStructMethods(QSharedPointer<ZStruct> struc) { return parseObjectMethods(nullptr, struc); }
 
     // Parser operates at File level
     //
-    ZFileRoot* root;
+    QSharedPointer<ZFileRoot> root;
     QList<ParserToken> parsedTokens;
 
     void reportError(QString err);
     void reportWarning(QString warn);
 
     //
-    static ZSystemType* resolveSystemType(QString name);
+    static QSharedPointer<ZSystemType> resolveSystemType(QString name);
 
-    QList<ZTreeNode*> getOwnTypeInformation();
-    QList<ZTreeNode*> getTypeInformation();
+    QList<QSharedPointer<ZTreeNode>> getOwnTypeInformation();
+    QList<QSharedPointer<ZTreeNode>> getTypeInformation();
 
 private:
     QList<Tokenizer::Token> tokens;
-    QList<ZTreeNode*> types;
+    QList<QSharedPointer<ZTreeNode>> types;
     // System type info. Initialized once
     static QList<ZSystemType> systemTypes;
 
     bool skipWhitespace(TokenStream& stream, bool newline);
     bool consumeTokens(TokenStream& stream, QList<Tokenizer::Token>& out, quint64 stopAtAnyOf);
 
-    ZExpression* parseExpression(TokenStream& stream, quint64 stopAtAnyOf);
-    void dumpExpression(ZExpression* expr, int level);
+    QSharedPointer<ZExpression> parseExpression(TokenStream& stream, quint64 stopAtAnyOf);
+    void dumpExpression(QSharedPointer<ZExpression> expr, int level);
 
     // these occur at the root scope
     bool parseRoot(TokenStream& stream);
-    ZClass* parseClass(TokenStream& stream, bool extend);
-    ZStruct* parseStruct(TokenStream& stream);
-    ZEnum* parseEnum(TokenStream& stream);
+    QSharedPointer<ZClass> parseClass(TokenStream& stream, bool extend);
+    QSharedPointer<ZStruct> parseStruct(TokenStream& stream);
+    QSharedPointer<ZEnum> parseEnum(TokenStream& stream);
 
     // this occurs in the class and struct body
-    bool parseCompoundType(TokenStream& stream, ZCompoundType& type, ZStruct* context);
-    bool parseObjectFields(ZClass* cls, ZStruct* struc);
+    bool parseCompoundType(TokenStream& stream, ZCompoundType& type, QSharedPointer<ZStruct> context);
+    bool parseObjectFields(QSharedPointer<ZClass> cls, QSharedPointer<ZStruct> struc);
 
     // this occurs in methods
-    bool parseObjectMethods(ZClass* cls, ZStruct* struc);
+    bool parseObjectMethods(QSharedPointer<ZClass> cls, QSharedPointer<ZStruct> struc);
     // parent = outer code block or loop/condition
     // context = nearest outer class
-    ZCodeBlock* parseCodeBlock(TokenStream& stream, ZTreeNode* parent, ZStruct* context);
-    ZForCycle* parseForCycle(TokenStream& stream, ZTreeNode* parent, ZStruct* context);
-    ZCondition* parseCondition(TokenStream& stream, ZTreeNode* parent, ZStruct* context);
+    QSharedPointer<ZCodeBlock> parseCodeBlock(TokenStream& stream, QSharedPointer<ZTreeNode> parent, QSharedPointer<ZStruct> context);
+    QSharedPointer<ZForCycle> parseForCycle(TokenStream& stream, QSharedPointer<ZTreeNode> parent, QSharedPointer<ZStruct> context);
+    QSharedPointer<ZCondition> parseCondition(TokenStream& stream, QSharedPointer<ZTreeNode> parent, QSharedPointer<ZStruct> context);
     // magic
-    void highlightExpression(ZExpression* expr, ZTreeNode* parent, ZStruct* context);
+    void highlightExpression(QSharedPointer<ZExpression> expr, QSharedPointer<ZTreeNode> parent, QSharedPointer<ZStruct> context);
 
     enum
     {
@@ -576,12 +633,12 @@ private:
         Stmt_CycleInitializer = Stmt_Initializer|Stmt_Expression,
         Stmt_Function = Stmt_Initializer|Stmt_Expression|Stmt_Cycle|Stmt_Return|Stmt_Condition
     };
-    QList<ZTreeNode*> parseStatement(TokenStream& stream, ZTreeNode* parent, ZStruct* context, quint64 flags, quint64 stopAtAnyOf);
-    ZCodeBlock* parseCodeBlockOrLine(TokenStream& stream, ZTreeNode* parent, ZStruct* context, ZTreeNode* recip);
+    QList<QSharedPointer<ZTreeNode>> parseStatement(TokenStream& stream, QSharedPointer<ZTreeNode> parent, QSharedPointer<ZStruct> context, quint64 flags, quint64 stopAtAnyOf);
+    QSharedPointer<ZCodeBlock> parseCodeBlockOrLine(TokenStream& stream, QSharedPointer<ZTreeNode> parent, QSharedPointer<ZStruct> context, QSharedPointer<ZTreeNode> recip);
 
     // helper
-    ZTreeNode* resolveType(QString name, ZStruct* context = nullptr, bool onlycontext = false);
-    ZTreeNode* resolveSymbol(QString name, ZTreeNode* parent, ZStruct* context);
+    QSharedPointer<ZTreeNode> resolveType(QString name, QSharedPointer<ZStruct> context = nullptr, bool onlycontext = false);
+    QSharedPointer<ZTreeNode> resolveSymbol(QString name, QSharedPointer<ZTreeNode> parent, QSharedPointer<ZStruct> context);
 };
 
 #endif // PARSER_H

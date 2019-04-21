@@ -1,7 +1,7 @@
 #include "parser.h"
 #include <cmath>
 
-bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
+bool Parser::parseObjectFields(QSharedPointer<ZClass> cls, QSharedPointer<ZStruct> struc)
 {
     // at this point, we have a list of tokens contained inside the struct/class body.
     // there, we have values in one of the forms:
@@ -33,7 +33,7 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
         {
             parsedTokens.append(ParserToken(token, ParserToken::Keyword));
             stream.setPosition(stream.position()+1);
-            ZEnum* enm = parseEnum(stream);
+            QSharedPointer<ZEnum> enm = parseEnum(stream);
             if (!enm)
             {
                 return false;
@@ -65,7 +65,7 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
             }
             parsedTokens.append(ParserToken(token, ParserToken::Operator));
             skipWhitespace(stream, true);
-            ZExpression* c_expression = parseExpression(stream, Tokenizer::Semicolon);
+            QSharedPointer<ZExpression> c_expression = parseExpression(stream, Tokenizer::Semicolon);
             if (!c_expression)
             {
                 qDebug("parseObjectFields: expected valid const expression at line %d", token.line);
@@ -75,11 +75,10 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
             if (!stream.expectToken(token, Tokenizer::Semicolon))
             {
                 qDebug("parseObjectFields: unexpected %s, expected semicolon at line %d", token.toCString(), token.line);
-                delete c_expression;
                 return false;
             }
             parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
-            ZConstant* konst = new ZConstant(struc);
+            QSharedPointer<ZConstant> konst = QSharedPointer<ZConstant>(new ZConstant(struc));
             konst->identifier = c_identifier;
             c_expression->parent = konst;
             konst->children.append(c_expression);
@@ -135,7 +134,7 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
             if (!prop_fields.size())
                 qDebug("parseObjectFields: warning: property '%s' without fields at line %d", prop_identifier.toUtf8().data(), token.line);
             parsedTokens.append(ParserToken(token, ParserToken::SpecialToken)); // semicolon
-            ZProperty* prop = new ZProperty(struc);
+            QSharedPointer<ZProperty> prop = QSharedPointer<ZProperty>(new ZProperty(struc));
             prop->identifier = prop_identifier;
             prop->fields = prop_fields;
             prop->lineNumber = lineno;
@@ -258,7 +257,7 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
             {
                 skipWhitespace(stream, true);
                 int cpos = stream.position();
-                ZExpression* expr = parseExpression(stream, Tokenizer::CloseSquare);
+                QSharedPointer<ZExpression> expr = parseExpression(stream, Tokenizer::CloseSquare);
                 if (!expr)
                 {
                     // check if next token is ], then null expr is pretty valid and means "just guess"
@@ -299,7 +298,7 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
         if (token.type == Tokenizer::Semicolon || token.type == Tokenizer::OpAssign)
         {
             // check assignment
-            ZExpression* assignmentExpr = nullptr;
+            QSharedPointer<ZExpression> assignmentExpr = nullptr;
             if (token.type == Tokenizer::OpAssign)
             {
                 // assignment token
@@ -316,7 +315,6 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
                 skipWhitespace(stream, true);
                 if (!stream.expectToken(token, Tokenizer::Semicolon))
                 {
-                    delete assignmentExpr;
                     for (ZCompoundType& t : fieldTypes) t.destroy();
                     qDebug("parseObjectFields: unexpected %s, expected semicolon at line %d", token.toCString(), token.line);
                     return false;
@@ -335,7 +333,7 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
             }
 
             // field is done!
-            ZField* field = new ZField(struc);
+            QSharedPointer<ZField> field = QSharedPointer<ZField>(new ZField(struc));
             field->identifier = f_name;
             field->flags = f_flags;
             field->fieldType = fieldTypes[0];
@@ -352,7 +350,7 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
             // method name
             parsedTokens.append(ParserToken(fieldNameToken, ParserToken::Method));
             //
-            QList<ZLocalVariable*> args;
+            QList<QSharedPointer<ZLocalVariable>> args;
             QList<Tokenizer::Token> body;
             bool hadellipsis = false;
             while (true)
@@ -361,7 +359,6 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
                 if (!stream.expectToken(token, Tokenizer::CloseParen|Tokenizer::Ellipsis|Tokenizer::Identifier))
                 {
                     for (ZCompoundType& t : fieldTypes) t.destroy();
-                    for (auto& arg : args) delete arg;
                     qDebug("parseObjectFields: unexpected %s, closing parenthesis, ellipsis or argument at line %d", token.toCString(), token.line);
                     return false;
                 }
@@ -394,7 +391,6 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
                 if (!parseCompoundType(stream, arg_type, struc))
                 {
                     for (ZCompoundType& t : fieldTypes) t.destroy();
-                    for (auto& arg : args) delete arg;
                     qDebug("parseObjectFields: expected valid argument type at line %d", token.line);
                     return false;
                 }
@@ -403,7 +399,6 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
                 if (!stream.expectToken(token, Tokenizer::Identifier))
                 {
                     for (ZCompoundType& t : fieldTypes) t.destroy();
-                    for (auto& arg : args) delete arg;
                     qDebug("parseObjectFields: unexpected %s, expected argument name at line %d", token.toCString(), token.line);
                     return false;
                 }
@@ -416,12 +411,11 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
                 if (!stream.expectToken(token, Tokenizer::CloseParen|Tokenizer::OpAssign|Tokenizer::Comma))
                 {
                     for (ZCompoundType& t : fieldTypes) t.destroy();
-                    for (auto& arg : args) delete arg;
                     qDebug("parseObjectFields: unexpected %s, expected closing parenthesis or default value at line %d", token.toCString(), token.line);
                     return false;
                 }
 
-                ZExpression* dexpr = nullptr;
+                QSharedPointer<ZExpression> dexpr = nullptr;
                 if (token.type == Tokenizer::OpAssign)
                 {
                     parsedTokens.append(ParserToken(token, ParserToken::Operator));
@@ -431,7 +425,6 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
                     if (!dexpr)
                     {
                         for (ZCompoundType& t : fieldTypes) t.destroy();
-                        for (auto& arg : args) delete arg;
                         qDebug("parseObjectFields: expected valid default value expression for '%s' at line %d", arg_name.toUtf8().data(), token.line);
                         return false;
                     }
@@ -441,14 +434,12 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
                     if (!stream.expectToken(token, Tokenizer::CloseParen|Tokenizer::Comma))
                     {
                         for (ZCompoundType& t : fieldTypes) t.destroy();
-                        for (auto& arg : args) delete arg;
-                        if (dexpr) delete dexpr;
                         qDebug("parseObjectFields: unexpected %s, expected closing parenthesis or comma at line %d", token.toCString(), token.line);
                         return false;
                     }
                 }
 
-                ZLocalVariable* arg = new ZLocalVariable(nullptr);
+                QSharedPointer<ZLocalVariable> arg = QSharedPointer<ZLocalVariable>(new ZLocalVariable(nullptr));
                 arg->identifier = arg_name;
                 if (dexpr)
                 {
@@ -475,7 +466,6 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
             if (!stream.expectToken(token, Tokenizer::Identifier|Tokenizer::OpenCurly|Tokenizer::Semicolon))
             {
                 for (ZCompoundType& t : fieldTypes) t.destroy();
-                for (auto& arg : args) delete arg;
                 qDebug("parseObjectFields: unexpected %s, expected 'const', semicolon or method body at line %d", token.toCString(), token.line);
                 return false;
             }
@@ -490,7 +480,6 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
                 else
                 {
                     for (ZCompoundType& t : fieldTypes) t.destroy();
-                    for (auto& arg : args) delete arg;
                     qDebug("parseObjectFields: invalid method flag %s, expected 'const' at line %d", token.toCString(), token.line);
                     return false;
                 }
@@ -499,7 +488,6 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
                 if (!stream.expectToken(token, Tokenizer::OpenCurly|Tokenizer::Semicolon))
                 {
                     for (ZCompoundType& t : fieldTypes) t.destroy();
-                    for (auto& arg : args) delete arg;
                     qDebug("parseObjectFields: unexpected %s, expected semicolon or method body at line %d", token.toCString(), token.line);
                     return false;
                 }
@@ -519,14 +507,12 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
                 if (!consumeTokens(stream, body, Tokenizer::CloseCurly) || !stream.peekToken(token) || token.type != Tokenizer::CloseCurly)
                 {
                     for (ZCompoundType& t : fieldTypes) t.destroy();
-                    for (auto& arg : args) delete arg;
                     qDebug("parseObjectFields: unexpected end of input for method body (method %s)", f_name.toUtf8().data());
                     return false;
                 }
                 if (!stream.expectToken(token, Tokenizer::CloseCurly))
                 {
                     for (ZCompoundType& t : fieldTypes) t.destroy();
-                    for (auto& arg : args) delete arg;
                     qDebug("parseObjectFields: unexpected %s, expected closing curly brace at line %d", token.toCString(), token.line);
                     return false;
                 }
@@ -536,7 +522,7 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
             }
 
             // we have all data about method
-            ZMethod* method = new ZMethod(struc);
+            QSharedPointer<ZMethod> method = QSharedPointer<ZMethod>(new ZMethod(struc));
             method->identifier = f_name;
             method->flags = f_flags;
             method->returnTypes = fieldTypes;
@@ -547,15 +533,15 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
             method->tokens = body;
             method->lineNumber = lineno;
             method->isValid = true;
-            // for destructor to work
-            for (auto& arg : args)
+            // for destructor and expressions to work
+            for (QSharedPointer<ZLocalVariable> arg : args)
                 arg->parent = method;
             struc->children.append(method);
         }
     }
 }
 
-bool Parser::parseCompoundType(TokenStream& stream, ZCompoundType& type, ZStruct* context)
+bool Parser::parseCompoundType(TokenStream& stream, ZCompoundType& type, QSharedPointer<ZStruct> context)
 {
     // get initial identifier
     Tokenizer::Token token;
@@ -565,18 +551,18 @@ bool Parser::parseCompoundType(TokenStream& stream, ZCompoundType& type, ZStruct
         return false;
     }
 
-    ZStruct* iterContext = context;
+    QSharedPointer<ZStruct> iterContext = context;
     QString prependContext = "";
     do
     {
         prependContext = iterContext->identifier + "." + prependContext;
-        ZTreeNode* p = iterContext->parent;
-        iterContext = (p && (p->type() == ZTreeNode::Class || p->type() == ZTreeNode::Struct)) ? reinterpret_cast<ZStruct*>(p) : nullptr;
+        QSharedPointer<ZTreeNode> p = iterContext->parent;
+        iterContext = (p && (p->type() == ZTreeNode::Class || p->type() == ZTreeNode::Struct)) ? p.dynamicCast<ZStruct>() : nullptr;
     }
     while (iterContext);
 
     // resolve system type
-    ZSystemType* systemType = resolveSystemType(token.value);
+    QSharedPointer<ZSystemType> systemType = resolveSystemType(token.value);
     if (systemType)
     {
         type.type = token.value.toLower();
@@ -586,7 +572,7 @@ bool Parser::parseCompoundType(TokenStream& stream, ZCompoundType& type, ZStruct
     }
     else
     {
-        ZTreeNode* lastType = resolveType(token.value, context);
+        QSharedPointer<ZTreeNode> lastType = resolveType(token.value, context);
         if (!lastType)
         {
             qDebug("parseCompoundType: warning: unresolved type %s", token.value.toUtf8().data());

@@ -3,17 +3,7 @@
 
 ZExpression::~ZExpression()
 {
-    for (int i = 0; i < leaves.size(); i++)
-    {
-        if (leaves[i].expr)
-        {
-            delete leaves[i].expr;
-            leaves[i].expr = nullptr;
-        }
-    }
-
-    leaves.clear();
-    resultType.destroy();
+    // not needed anymore?
 }
 
 static QString typeFromLeaf(ZExpressionLeaf& leaf)
@@ -47,8 +37,8 @@ static bool evaluateCast(ZExpressionLeaf& leaf, ZExpressionLeaf& out, QString ty
     typeTo = typeTo.toLower();
 
     // get system types for both
-    ZSystemType* systemFrom = Parser::resolveSystemType(typeFrom);
-    ZSystemType* systemTo = Parser::resolveSystemType(typeTo);
+    QSharedPointer<ZSystemType> systemFrom = Parser::resolveSystemType(typeFrom);
+    QSharedPointer<ZSystemType> systemTo = Parser::resolveSystemType(typeTo);
     if (!systemFrom || !systemTo)
         return false;
 
@@ -476,7 +466,7 @@ static bool mergeTernaryExpression(QList<ZExpressionLeaf>& leaves)
 
             ZExpressionLeaf newleaf;
             newleaf.type = ZExpressionLeaf::Expression;
-            newleaf.expr = new ZExpression(nullptr);
+            newleaf.expr = QSharedPointer<ZExpression>(new ZExpression(nullptr));
             newleaf.expr->op = ZExpression::Ternary;
             newleaf.expr->assign = false;
             newleaf.expr->leaves.append(leaves[i-1]);
@@ -637,7 +627,7 @@ static bool mergeBinaryExpressions(QList<ZExpressionLeaf>& leaves, ZExpression::
             {
                 ZExpressionLeaf newleaf;
                 newleaf.type = ZExpressionLeaf::Expression;
-                newleaf.expr = new ZExpression(nullptr);
+                newleaf.expr = QSharedPointer<ZExpression>(new ZExpression(nullptr));
                 newleaf.expr->op = ZExpression::PreIncrement;
                 newleaf.expr->leaves.append(leaves[i+1]);
                 newleaf.expr->operatorTokens.append(token);
@@ -649,7 +639,7 @@ static bool mergeBinaryExpressions(QList<ZExpressionLeaf>& leaves, ZExpression::
             {
                 ZExpressionLeaf newleaf;
                 newleaf.type = ZExpressionLeaf::Expression;
-                newleaf.expr = new ZExpression(nullptr);
+                newleaf.expr = QSharedPointer<ZExpression>(new ZExpression(nullptr));
                 newleaf.expr->op = ZExpression::PostIncrement;
                 newleaf.expr->leaves.append(leaves[i-1]);
                 newleaf.expr->operatorTokens.append(token);
@@ -665,7 +655,7 @@ static bool mergeBinaryExpressions(QList<ZExpressionLeaf>& leaves, ZExpression::
             {
                 ZExpressionLeaf newleaf;
                 newleaf.type = ZExpressionLeaf::Expression;
-                newleaf.expr = new ZExpression(nullptr);
+                newleaf.expr = QSharedPointer<ZExpression>(new ZExpression(nullptr));
                 newleaf.expr->op = ZExpression::PreDecrement;
                 newleaf.expr->leaves.append(leaves[i+1]);
                 newleaf.expr->operatorTokens.append(token);
@@ -677,7 +667,7 @@ static bool mergeBinaryExpressions(QList<ZExpressionLeaf>& leaves, ZExpression::
             {
                 ZExpressionLeaf newleaf;
                 newleaf.type = ZExpressionLeaf::Expression;
-                newleaf.expr = new ZExpression(nullptr);
+                newleaf.expr = QSharedPointer<ZExpression>(new ZExpression(nullptr));
                 newleaf.expr->op = ZExpression::PostDecrement;
                 newleaf.expr->leaves.append(leaves[i-1]);
                 newleaf.expr->operatorTokens.append(token);
@@ -697,7 +687,7 @@ static bool mergeBinaryExpressions(QList<ZExpressionLeaf>& leaves, ZExpression::
 
             ZExpressionLeaf newleaf;
             newleaf.type = ZExpressionLeaf::Expression;
-            newleaf.expr = new ZExpression(nullptr);
+            newleaf.expr = QSharedPointer<ZExpression>(new ZExpression(nullptr));
             newleaf.expr->op = op;
             newleaf.expr->leaves.append(leaves[i+1]);
             newleaf.expr->operatorTokens.append(token);
@@ -711,7 +701,7 @@ static bool mergeBinaryExpressions(QList<ZExpressionLeaf>& leaves, ZExpression::
 
         ZExpressionLeaf newleaf;
         newleaf.type = ZExpressionLeaf::Expression;
-        newleaf.expr = new ZExpression(nullptr);
+        newleaf.expr = QSharedPointer<ZExpression>(new ZExpression(nullptr));
         newleaf.expr->op = op;
         newleaf.expr->assign = isAssign || mergeop == ZExpression::Assign;
         newleaf.expr->leaves.append(leaves[i-1]);
@@ -748,7 +738,7 @@ static bool isValidForAssign(Tokenizer::TokenType type)
     }
 }
 
-ZExpression* Parser::parseExpression(TokenStream& stream, quint64 stopAtAnyOf)
+QSharedPointer<ZExpression> Parser::parseExpression(TokenStream& stream, quint64 stopAtAnyOf)
 {
     // for now, expect int + operator + int
     // then complicate things more. later
@@ -809,7 +799,7 @@ ZExpression* Parser::parseExpression(TokenStream& stream, quint64 stopAtAnyOf)
                 leaf_array.type = ZExpressionLeaf::Expression;
                 // split by commas
                 int lastPos = 0;
-                QList<ZExpression*> exprs;
+                QList<QSharedPointer<ZExpression>> exprs;
                 for (int i = 0; i <= exprTokens.size(); i++)
                 {
                     if (i == exprTokens.size() || exprTokens[i].type == Tokenizer::Comma)
@@ -817,19 +807,15 @@ ZExpression* Parser::parseExpression(TokenStream& stream, quint64 stopAtAnyOf)
                         // since lastPos until i
                         QList<Tokenizer::Token> localExprTokens = exprTokens.mid(lastPos, i-lastPos);
                         TokenStream exprStream(localExprTokens);
-                        ZExpression* subexpr = parseExpression(exprStream, 0);
+                        QSharedPointer<ZExpression> subexpr = parseExpression(exprStream, 0);
                         if (!subexpr)
-                        {
-                            for (ZExpression* expr : exprs)
-                                delete expr;
                             goto fail;
-                        }
                         exprs.append(subexpr);
                         lastPos = i+1;
                     }
                 }
-                ZExpression* subexpr = new ZExpression(nullptr);
-                for (ZExpression* expr : exprs)
+                QSharedPointer<ZExpression> subexpr = QSharedPointer<ZExpression>(new ZExpression(nullptr));
+                for (QSharedPointer<ZExpression> expr : exprs)
                 {
                     ZExpressionLeaf leaf;
                     leaf.type = ZExpressionLeaf::Expression;
@@ -877,7 +863,7 @@ ZExpression* Parser::parseExpression(TokenStream& stream, quint64 stopAtAnyOf)
                     leaf_vector.type = ZExpressionLeaf::Expression;
                     // split by commas
                     int lastPos = 0;
-                    QList<ZExpression*> exprs;
+                    QList<QSharedPointer<ZExpression>> exprs;
                     for (int i = 0; i <= exprTokens.size(); i++)
                     {
                         if (i == exprTokens.size() || exprTokens[i].type == Tokenizer::Comma)
@@ -886,19 +872,15 @@ ZExpression* Parser::parseExpression(TokenStream& stream, quint64 stopAtAnyOf)
                             if (i < exprTokens.size()) specTokens.append(exprTokens[i]);
                             QList<Tokenizer::Token> localExprTokens = exprTokens.mid(lastPos, i-lastPos);
                             TokenStream exprStream(localExprTokens);
-                            ZExpression* subexpr = parseExpression(exprStream, 0);
+                            QSharedPointer<ZExpression> subexpr = parseExpression(exprStream, 0);
                             if (!subexpr)
-                            {
-                                for (ZExpression* expr : exprs)
-                                    delete expr;
                                 goto fail;
-                            }
                             exprs.append(subexpr);
                             lastPos = i+1;
                         }
                     }
-                    ZExpression* subexpr = new ZExpression(nullptr);
-                    for (ZExpression* expr : exprs)
+                    QSharedPointer<ZExpression> subexpr = QSharedPointer<ZExpression>(new ZExpression(nullptr));
+                    for (QSharedPointer<ZExpression> expr : exprs)
                     {
                         ZExpressionLeaf leaf;
                         leaf.type = ZExpressionLeaf::Expression;
@@ -913,7 +895,7 @@ ZExpression* Parser::parseExpression(TokenStream& stream, quint64 stopAtAnyOf)
                 else
                 {
                     TokenStream exprStream(exprTokens);
-                    ZExpression* subexpr = parseExpression(exprStream, 0);
+                    QSharedPointer<ZExpression> subexpr = parseExpression(exprStream, 0);
                     if (!subexpr)
                         goto fail;
 
@@ -985,7 +967,7 @@ ZExpression* Parser::parseExpression(TokenStream& stream, quint64 stopAtAnyOf)
                         goto fail;
 
                     TokenStream exprStream(exprTokens);
-                    ZExpression* subexpr = parseExpression(exprStream, 0);
+                    QSharedPointer<ZExpression> subexpr = parseExpression(exprStream, 0);
                     if (!subexpr)
                         goto fail;
 
@@ -994,7 +976,7 @@ ZExpression* Parser::parseExpression(TokenStream& stream, quint64 stopAtAnyOf)
                     leaf_expr.expr = subexpr;
                     ZExpressionLeaf leaf_cast;
                     leaf_cast.type = ZExpressionLeaf::Expression;
-                    leaf_cast.expr = new ZExpression(nullptr);
+                    leaf_cast.expr = QSharedPointer<ZExpression>(new ZExpression(nullptr));
                     leaf_cast.expr->op = ZExpression::Cast;
                     leaf_cast.expr->leaves.append(leaf_type);
                     leaf_cast.expr->leaves.append(leaf_expr);
@@ -1014,7 +996,7 @@ ZExpression* Parser::parseExpression(TokenStream& stream, quint64 stopAtAnyOf)
                         // member access
                         ZExpressionLeaf leaf_left;
                         leaf_left.type = ZExpressionLeaf::Expression;
-                        ZExpression* expr = new ZExpression(nullptr);
+                        QSharedPointer<ZExpression> expr = QSharedPointer<ZExpression>(new ZExpression(nullptr));
                         expr->op = ZExpression::Member;
                         leaf_left.expr = expr;
                         ZExpressionLeaf leaf_root;
@@ -1070,7 +1052,7 @@ ZExpression* Parser::parseExpression(TokenStream& stream, quint64 stopAtAnyOf)
             {
                 ZExpressionLeaf un_leaf;
                 un_leaf.type = ZExpressionLeaf::Expression;
-                un_leaf.expr = new ZExpression(nullptr);
+                un_leaf.expr = QSharedPointer<ZExpression>(new ZExpression(nullptr));
                 un_leaf.expr->op = unaryOp;
                 ZExpressionLeaf& last = leaves.last();
                 un_leaf.expr->leaves.append(last);
@@ -1162,29 +1144,17 @@ ZExpression* Parser::parseExpression(TokenStream& stream, quint64 stopAtAnyOf)
                 // read in subscript
                 QList<Tokenizer::Token> subTokens;
                 if (!consumeTokens(stream, subTokens, Tokenizer::CloseSquare))
-                {
-                    for (int i = 0; i < arrsubscripts.size(); i++)
-                        delete arrsubscripts[i].expr;
                     goto fail;
-                }
                 //
                 // make sure we did find a close square
                 if (!stream.expectToken(token, Tokenizer::CloseSquare))
-                {
-                    for (int i = 0; i < arrsubscripts.size(); i++)
-                        delete arrsubscripts[i].expr;
                     goto fail;
-                }
                 specTokens.append(token);
                 // parse expression under this subscript
                 TokenStream exprStream(subTokens);
-                ZExpression* expr = parseExpression(exprStream, 0);
+                QSharedPointer<ZExpression> expr = parseExpression(exprStream, 0);
                 if (!expr)
-                {
-                    for (int i = 0; i < arrsubscripts.size(); i++)
-                        delete arrsubscripts[i].expr;
                     goto fail;
-                }
                 ZExpressionLeaf subleaf;
                 subleaf.type = ZExpressionLeaf::Expression;
                 subleaf.expr = expr;
@@ -1196,7 +1166,7 @@ ZExpression* Parser::parseExpression(TokenStream& stream, quint64 stopAtAnyOf)
                 break;
             }
             // read multiple subscripts, store
-            ZExpression* arrexpr = new ZExpression(nullptr);
+            QSharedPointer<ZExpression> arrexpr = QSharedPointer<ZExpression>(new ZExpression(nullptr));
             arrexpr->op = ZExpression::ArraySubscript;
             arrexpr->leaves.append(last);
             arrexpr->specialTokens.append(specTokens);
@@ -1227,11 +1197,7 @@ ZExpression* Parser::parseExpression(TokenStream& stream, quint64 stopAtAnyOf)
                 // read in expression
                 QList<Tokenizer::Token> exprTokens;
                 if (!consumeTokens(stream, exprTokens, Tokenizer::CloseParen|Tokenizer::Comma))
-                {
-                    for (int i = 0; i < callargs.size(); i++)
-                        delete callargs[i].expr;
                     goto fail;
-                }
 
                 bool nonwhitespace = false;
                 for (int i = 0; i < exprTokens.size(); i++)
@@ -1248,15 +1214,9 @@ ZExpression* Parser::parseExpression(TokenStream& stream, quint64 stopAtAnyOf)
                 stream.readToken(token);
 
                 TokenStream exprStream(exprTokens);
-                ZExpression* subexpr = parseExpression(exprStream, 0);
+                QSharedPointer<ZExpression> subexpr = parseExpression(exprStream, 0);
                 if ((!subexpr && nonwhitespace) || (token.type != Tokenizer::CloseParen && token.type != Tokenizer::Comma))
-                {
-                    if (subexpr)
-                        delete subexpr;
-                    for (int i = 0; i < callargs.size(); i++)
-                        delete callargs[i].expr;
                     goto fail;
-                }
 
                 specTokens.append(token);
 
@@ -1272,7 +1232,7 @@ ZExpression* Parser::parseExpression(TokenStream& stream, quint64 stopAtAnyOf)
                     break;
             }
 
-            ZExpression* callexpr = new ZExpression(nullptr);
+            QSharedPointer<ZExpression> callexpr = QSharedPointer<ZExpression>(new ZExpression(nullptr));
             callexpr->op = ZExpression::Call;
             callexpr->leaves.append(last);
             callexpr->specialTokens.append(specTokens);
@@ -1313,7 +1273,7 @@ ZExpression* Parser::parseExpression(TokenStream& stream, quint64 stopAtAnyOf)
                     break;
                 }
             }
-            ZExpression* memberexpr = new ZExpression(nullptr);
+            QSharedPointer<ZExpression> memberexpr = QSharedPointer<ZExpression>(new ZExpression(nullptr));
             memberexpr->op = ZExpression::Member;
             memberexpr->leaves = members;
             ZExpressionLeaf memberleaf;
@@ -1377,12 +1337,6 @@ finish:
     if (leaves.size() != 1 || didfail)
     {
         stream.setPosition(cpos);
-        for (int i = 0; i < leaves.size(); i++)
-        {
-            if (leaves[i].type == ZExpressionLeaf::Expression)
-                delete leaves[i].expr;
-        }
-
         return nullptr;
     }
     else
@@ -1396,7 +1350,7 @@ finish:
                 ZExpressionLeaf& leaf = leaves[0];
                 if (leaf.type == ZExpressionLeaf::Identifier)
                 {
-                    ZExpression* expr = new ZExpression(nullptr);
+                    QSharedPointer<ZExpression> expr = QSharedPointer<ZExpression>(new ZExpression(nullptr));
                     expr->op = ZExpression::Identifier;
                     expr->leaves.append(leaf);
                     return expr;
@@ -1410,7 +1364,7 @@ finish:
                     case ZExpressionLeaf::String:
                     case ZExpressionLeaf::Double:
                     {
-                        ZExpression* expr = new ZExpression(nullptr);
+                        QSharedPointer<ZExpression> expr = QSharedPointer<ZExpression>(new ZExpression(nullptr));
                         expr->op = ZExpression::Literal;
                         expr->leaves.append(leaf);
                         return expr;
@@ -1497,7 +1451,7 @@ static QString operatorToString(ZExpression::Operator op)
     }
 }
 
-void Parser::dumpExpression(ZExpression* expr, int level)
+void Parser::dumpExpression(QSharedPointer<ZExpression> expr, int level)
 {
     if (!expr)
         return;
@@ -1543,10 +1497,10 @@ void Parser::dumpExpression(ZExpression* expr, int level)
 }
 
 //
-static QString getFullFieldName(ZTreeNode* node)
+static QString getFullFieldName(QSharedPointer<ZTreeNode> node)
 {
     QString parents = node->identifier;
-    ZTreeNode* p = node->parent;
+    QSharedPointer<ZTreeNode> p = node->parent;
     while (p)
     {
         if (p->type() == ZTreeNode::Class || p->type() == ZTreeNode::Struct)
@@ -1556,7 +1510,7 @@ static QString getFullFieldName(ZTreeNode* node)
     return parents;
 }
 
-void Parser::highlightExpression(ZExpression* expr, ZTreeNode* parent, ZStruct* context)
+void Parser::highlightExpression(QSharedPointer<ZExpression> expr, QSharedPointer<ZTreeNode> parent, QSharedPointer<ZStruct> context)
 {
     for (Tokenizer::Token& tok : expr->operatorTokens)
         parsedTokens.append(ParserToken(tok, ParserToken::Operator));
@@ -1578,11 +1532,11 @@ void Parser::highlightExpression(ZExpression* expr, ZTreeNode* parent, ZStruct* 
             {
                 // leaf in a Call is always an expression. if it's a string, make it a type name
                 ZExpressionLeaf& leaf = expr->leaves[i];
-                ZExpression* leafExpr = leaf.expr;
+                QSharedPointer<ZExpression> leafExpr = leaf.expr;
                 if (leafExpr->op == ZExpression::Literal && leafExpr->leaves.size() && leafExpr->leaves[0].type == ZExpressionLeaf::String)
                 {
                     Tokenizer::Token& tok = leafExpr->leaves[0].token;
-                    ZTreeNode* resolved = resolveType(tok.value, context);
+                    QSharedPointer<ZTreeNode> resolved = resolveType(tok.value, context);
                     parsedTokens.append(ParserToken(tok, ParserToken::TypeName, resolved, tok.value));
                     // set type of this expression to resolved type
                     expr->resultType.type = tok.value;
@@ -1602,8 +1556,8 @@ void Parser::highlightExpression(ZExpression* expr, ZTreeNode* parent, ZStruct* 
     {
         // resolve symbol
         // in a Member, all leaves are identifiers
-        ZTreeNode* lastcls = nullptr;
-        ZTreeNode* lastfound = nullptr;
+        QSharedPointer<ZTreeNode> lastcls = nullptr;
+        QSharedPointer<ZTreeNode> lastfound = nullptr;
         bool fullfound = true;
         bool isstatic = false;
         for (int i = 0; i < expr->leaves.size(); i++)
@@ -1620,7 +1574,7 @@ void Parser::highlightExpression(ZExpression* expr, ZTreeNode* parent, ZStruct* 
                     continue;
                 }
                 QString firstSymbol = leaf.token.value;
-                ZTreeNode* resolved = resolveSymbol(firstSymbol, parent, context);
+                QSharedPointer<ZTreeNode> resolved = resolveSymbol(firstSymbol, parent, context);
                 if (resolved)
                 {
                     ParserToken::TokenType t = ParserToken::Local;
@@ -1645,20 +1599,20 @@ void Parser::highlightExpression(ZExpression* expr, ZTreeNode* parent, ZStruct* 
                     ZCompoundType ft;
                     if (resolved->type() == ZTreeNode::Method)
                     {
-                        ZMethod* method = reinterpret_cast<ZMethod*>(resolved);
+                        QSharedPointer<ZMethod> method = resolved.dynamicCast<ZMethod>();
                         ft = method->returnTypes[0];
                     }
                     else if (resolved->type() == ZTreeNode::Field)
                     {
-                        ZField* field = reinterpret_cast<ZField*>(resolved);
+                        QSharedPointer<ZField> field = resolved.dynamicCast<ZField>();
                         ft = field->fieldType;
                     }
                     else if (resolved->type() == ZTreeNode::LocalVariable)
                     {
-                        ZLocalVariable* local = reinterpret_cast<ZLocalVariable*>(resolved);
+                        QSharedPointer<ZLocalVariable> local = resolved.dynamicCast<ZLocalVariable>();
                         if (!local->hasType && local->children.size() && local->children[0]->type() == ZTreeNode::Expression)
                         {
-                            ZExpression* localExpr = reinterpret_cast<ZExpression*>(local->children[0]);
+                            QSharedPointer<ZExpression> localExpr = local->children[0].dynamicCast<ZExpression>();
                             ft = localExpr->resultType;
                         }
                         else
@@ -1672,7 +1626,7 @@ void Parser::highlightExpression(ZExpression* expr, ZTreeNode* parent, ZStruct* 
                 else
                 {
                     // check if it's a class
-                    ZTreeNode* typeFound = resolveType(firstSymbol, context);
+                    QSharedPointer<ZTreeNode> typeFound = resolveType(firstSymbol, context);
                     if (!typeFound)
                     {
                         fullfound = false;
@@ -1689,7 +1643,7 @@ void Parser::highlightExpression(ZExpression* expr, ZTreeNode* parent, ZStruct* 
             else if (lastcls)
             {
                 // find field/method
-                for (ZTreeNode* node : lastcls->children)
+                for (QSharedPointer<ZTreeNode> node : lastcls->children)
                 {
                     if ((node->type() == ZTreeNode::Method || node->type() == ZTreeNode::Field || node->type() == ZTreeNode::Constant || node->type() == ZTreeNode::Struct) &&
                             !node->identifier.compare(leaf.token.value, Qt::CaseInsensitive))
@@ -1698,12 +1652,12 @@ void Parser::highlightExpression(ZExpression* expr, ZTreeNode* parent, ZStruct* 
                         bool fisstatic = false;
                         if (node->type() == ZTreeNode::Field)
                         {
-                            ZField* field = reinterpret_cast<ZField*>(node);
+                            QSharedPointer<ZField> field = node.dynamicCast<ZField>();
                             fisstatic = field->flags.contains("static");
                         }
                         else if (node->type() == ZTreeNode::Method)
                         {
-                            ZMethod* method = reinterpret_cast<ZMethod*>(node);
+                            QSharedPointer<ZMethod> method = node.dynamicCast<ZMethod>();
                             fisstatic = method->flags.contains("static");
                         }
                         else if (node->type() == ZTreeNode::Constant)
@@ -1739,13 +1693,13 @@ void Parser::highlightExpression(ZExpression* expr, ZTreeNode* parent, ZStruct* 
                         ZCompoundType ft;
                         if (node->type() == ZTreeNode::Method)
                         {
-                            ZMethod* method = reinterpret_cast<ZMethod*>(node);
+                            QSharedPointer<ZMethod> method = node.dynamicCast<ZMethod>();
                             ft = method->returnTypes[0];
                             // todo mark as method access
                         }
                         else if (node->type() == ZTreeNode::Field)
                         {
-                            ZField* field = reinterpret_cast<ZField*>(node);
+                            QSharedPointer<ZField> field = node.dynamicCast<ZField>();
                             ft = field->fieldType;
                             // todo mark as field access
                         }
@@ -1771,12 +1725,12 @@ void Parser::highlightExpression(ZExpression* expr, ZTreeNode* parent, ZStruct* 
             // type of this expression will be either type of last field, or type of method return value
             if (lastfound->type() == ZTreeNode::Field)
             {
-                ZField* field = reinterpret_cast<ZField*>(lastfound);
+                QSharedPointer<ZField> field = lastfound.dynamicCast<ZField>();
                 expr->resultType = field->fieldType;
             }
             else if (lastfound->type() == ZTreeNode::Method)
             {
-                ZMethod* method = reinterpret_cast<ZMethod*>(lastfound);
+                QSharedPointer<ZMethod> method = lastfound.dynamicCast<ZMethod>();
                 expr->resultType = method->returnTypes[0];
             }
             else if (lastfound->type() == ZTreeNode::Constant)
@@ -1802,7 +1756,7 @@ void Parser::highlightExpression(ZExpression* expr, ZTreeNode* parent, ZStruct* 
         {
             if (keywords.contains(leaf.token.value.toLower()))
                 parsedTokens.append(ParserToken(leaf.token, ParserToken::Keyword));
-            ZTreeNode* resolved = resolveSymbol(leaf.token.value, parent, context);
+            QSharedPointer<ZTreeNode> resolved = resolveSymbol(leaf.token.value, parent, context);
             if (resolved)
             {
                 ParserToken::TokenType t = ParserToken::Local;
@@ -1850,10 +1804,10 @@ void Parser::highlightExpression(ZExpression* expr, ZTreeNode* parent, ZStruct* 
         }
         else if (leaf.type == ZExpressionLeaf::Identifier)
         {
-            ZTreeNode* resolved = resolveSymbol(leaf.token.value, parent, context);
+            QSharedPointer<ZTreeNode> resolved = resolveSymbol(leaf.token.value, parent, context);
             if (resolved && resolved->type() == ZTreeNode::Method)
             {
-                ZMethod* method = reinterpret_cast<ZMethod*>(resolved);
+                QSharedPointer<ZMethod> method = resolved.dynamicCast<ZMethod>();
                 expr->resultType = method->returnTypes[0];
             }
         }

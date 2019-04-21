@@ -35,21 +35,17 @@ QList<ZSystemType> Parser::systemTypes = QList<ZSystemType>()
 
 Parser::Parser(QList<Tokenizer::Token> tokens) : tokens(tokens)
 {
-    root = nullptr;
+
 }
 
 Parser::~Parser()
 {
-    if (root)
-        delete root;
-    root = nullptr;
+    // not needed anymore
 }
 
 ZTreeNode::~ZTreeNode()
 {
-    for (QList<ZTreeNode*>::iterator it = children.begin(); it != children.end(); ++it)
-        delete (*it);
-    children.clear();
+    // not needed anymore
 }
 
 static void dumpType(ZStruct*, int);
@@ -67,7 +63,7 @@ bool Parser::parse()
         i--;
     }
 
-    root = new ZFileRoot(nullptr);
+    root = QSharedPointer<ZFileRoot>(new ZFileRoot(nullptr));
     root->parser = this;
     root->isValid = true;
 
@@ -179,22 +175,22 @@ void Parser::reportWarning(QString warn)
     qDebug("Parser WARN: %s", warn.toUtf8().data());
 }
 
-void Parser::setTypeInformation(QList<ZTreeNode*> _types)
+void Parser::setTypeInformation(QList<QSharedPointer<ZTreeNode>> _types)
 {
     types = _types;
-    for (ZTreeNode* struc : types)
+    for (QSharedPointer<ZTreeNode> struc : types)
     {
         // if struct is a class, we need to resolve references to other types (replaces, extends...)
         if (struc->type() != ZTreeNode::Class)
             continue;
-        ZClass* cls = reinterpret_cast<ZClass*>(struc);
+        QSharedPointer<ZClass> cls = struc.dynamicCast<ZClass>();
         if (!cls->extendName.isEmpty() || !cls->parentName.isEmpty() || !cls->replaceName.isEmpty())
         {
-            for (ZTreeNode* struc2 : types)
+            for (QSharedPointer<ZTreeNode> struc2 : types)
             {
                 if (struc2->type() != ZTreeNode::Class)
                     continue;
-                ZClass* cls2 = reinterpret_cast<ZClass*>(struc2);
+                QSharedPointer<ZClass> cls2 = struc2.dynamicCast<ZClass>();
                 if (cls2->identifier == cls->extendName)
                 {
                     cls->extendReference = cls2;
@@ -225,14 +221,14 @@ void Parser::setTypeInformation(QList<ZTreeNode*> _types)
     {
         if (token.type == ParserToken::TypeName)
         {
-            ZTreeNode* resolved = resolveType(token.referencePath);
+            QSharedPointer<ZTreeNode> resolved = resolveType(token.referencePath);
             if (resolved) token.reference = resolved;
             else qDebug("setTypeInformation: warning: unresolved type %s", token.referencePath.toUtf8().data());
         }
     }
 }
 
-ZTreeNode* Parser::resolveType(QString name, ZStruct* context, bool onlycontext)
+QSharedPointer<ZTreeNode> Parser::resolveType(QString name, QSharedPointer<ZStruct> context, bool onlycontext)
 {
     if (!onlycontext && name.toLower() == "string")
         name = "stringstruct"; // this is because of ZScript hack
@@ -244,7 +240,7 @@ ZTreeNode* Parser::resolveType(QString name, ZStruct* context, bool onlycontext)
         if (!onlycontext && !context->identifier.compare(name, Qt::CaseInsensitive))
             return context;
         // search for local type name
-        for (ZTreeNode* node : context->children)
+        for (QSharedPointer<ZTreeNode> node : context->children)
         {
             if ((node->type() == ZTreeNode::Struct || node->type() == ZTreeNode::Class || node->type() == ZTreeNode::Enum)
                     && !node->identifier.compare(nameParts[0], Qt::CaseInsensitive))
@@ -258,7 +254,7 @@ ZTreeNode* Parser::resolveType(QString name, ZStruct* context, bool onlycontext)
     if (onlycontext) return nullptr;
 
     // search global type scope
-    for (ZTreeNode* node : types)
+    for (QSharedPointer<ZTreeNode> node : types)
     {
         if ((node->type() == ZTreeNode::Struct || node->type() == ZTreeNode::Class || node->type() == ZTreeNode::Enum)
                 && !node->identifier.compare(nameParts[0], Qt::CaseInsensitive))
@@ -266,25 +262,25 @@ ZTreeNode* Parser::resolveType(QString name, ZStruct* context, bool onlycontext)
             if (nameParts.size() == 1)
                 return node; // type found
             else if (node->type() == ZTreeNode::Struct || node->type() == ZTreeNode::Class)
-                return resolveType(nameParts.mid(1).join("."), reinterpret_cast<ZStruct*>(node), true);
+                return resolveType(nameParts.mid(1).join("."), node.dynamicCast<ZStruct>(), true);
         }
     }
 
     return nullptr; // not found
 }
 
-ZSystemType* Parser::resolveSystemType(QString name)
+QSharedPointer<ZSystemType> Parser::resolveSystemType(QString name)
 {
     for (ZSystemType& t : systemTypes)
     {
         if (!t.identifier.compare(name, Qt::CaseInsensitive))
-            return &t;
+            return QSharedPointer<ZSystemType>(new ZSystemType(t));
     }
 
     return nullptr;
 }
 
-ZTreeNode* Parser::resolveSymbol(QString name, ZTreeNode* parent, ZStruct* context)
+QSharedPointer<ZTreeNode> Parser::resolveSymbol(QString name, QSharedPointer<ZTreeNode> parent, QSharedPointer<ZStruct> context)
 {
     if (name == "self")
     {
@@ -293,14 +289,14 @@ ZTreeNode* Parser::resolveSymbol(QString name, ZTreeNode* parent, ZStruct* conte
     }
 
     // first, look in all parent scopes
-    ZTreeNode* p = parent;
+    QSharedPointer<ZTreeNode> p = parent;
     while (p)
     {
         if (p->type() == ZTreeNode::ForCycle) // for cycle also has initializer.
         {
             // check if it's a variable in the initializer
-            ZForCycle* forCycle = reinterpret_cast<ZForCycle*>(p);
-            for (ZTreeNode* node : forCycle->initializers)
+            QSharedPointer<ZForCycle> forCycle = p.dynamicCast<ZForCycle>();
+            for (QSharedPointer<ZTreeNode> node : forCycle->initializers)
             {
                 if (node->type() == ZTreeNode::LocalVariable && !node->identifier.compare(name, Qt::CaseInsensitive))
                     return node; // found local variable from For initializer
@@ -308,8 +304,8 @@ ZTreeNode* Parser::resolveSymbol(QString name, ZTreeNode* parent, ZStruct* conte
         }
         else if (p->type() == ZTreeNode::Method) // method also has arguments.
         {
-            ZMethod* method = reinterpret_cast<ZMethod*>(p);
-            for (ZLocalVariable* var : method->arguments)
+            QSharedPointer<ZMethod> method = p.dynamicCast<ZMethod>();
+            for (QSharedPointer<ZLocalVariable> var : method->arguments)
             {
                 if (!var->identifier.compare(name, Qt::CaseInsensitive))
                     return var;
@@ -317,7 +313,7 @@ ZTreeNode* Parser::resolveSymbol(QString name, ZTreeNode* parent, ZStruct* conte
         }
 
         // look for local variable definition in the block
-        for (ZTreeNode* node : p->children)
+        for (QSharedPointer<ZTreeNode> node : p->children)
         {
             if (node->type() == ZTreeNode::LocalVariable && !node->identifier.compare(name, Qt::CaseInsensitive))
                 return node; // found local variable in block
@@ -329,7 +325,7 @@ ZTreeNode* Parser::resolveSymbol(QString name, ZTreeNode* parent, ZStruct* conte
     // check context fields
     if (context)
     {
-        for (ZTreeNode* node : context->children)
+        for (QSharedPointer<ZTreeNode> node : context->children)
         {
             if ((node->type() == ZTreeNode::Field ||
                  node->type() == ZTreeNode::Method ||
@@ -343,24 +339,23 @@ ZTreeNode* Parser::resolveSymbol(QString name, ZTreeNode* parent, ZStruct* conte
     return nullptr;
 }
 
-QList<ZTreeNode*> Parser::getOwnTypeInformation()
+QList<QSharedPointer<ZTreeNode>> Parser::getOwnTypeInformation()
 {
-    QList<ZTreeNode*> types;
-    for (ZTreeNode* node : root->children)
+    QList<QSharedPointer<ZTreeNode>> types;
+    for (QSharedPointer<ZTreeNode> node : root->children)
     {
         if (node->type() == ZTreeNode::Class || node->type() == ZTreeNode::Struct || node->type() == ZTreeNode::Enum)
-            types.append(reinterpret_cast<ZStruct*>(node));
+            types.append(node);
     }
     return types;
 }
 
-QList<ZTreeNode*> Parser::getTypeInformation()
+QList<QSharedPointer<ZTreeNode>> Parser::getTypeInformation()
 {
     return types;
 }
 
 ZStruct::~ZStruct()
 {
-    if (self) delete self;
-    self = nullptr;
+    // not needed anymore?
 }
