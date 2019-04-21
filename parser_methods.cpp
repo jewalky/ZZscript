@@ -32,6 +32,9 @@ bool Parser::parseObjectMethods(QSharedPointer<ZClass> cls, QSharedPointer<ZStru
         method->children.append(rootBlock);
     }
 
+    // success here means that we don't need tokens anymore. free memory
+    tokens.clear();
+
     // go through subobjects (embedded structs) and parse their methods too
     bool allok = true;
     for (QSharedPointer<ZTreeNode> node : struc->children)

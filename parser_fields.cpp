@@ -535,6 +535,9 @@ bool Parser::parseObjectFields(QSharedPointer<ZClass> cls, QSharedPointer<ZStruc
         }
     }
 
+    // success here means that we don't need tokens anymore. free memory
+    tokens.clear();
+
     bool allok = true;
     // now that all object fields are parsed, we need to also call this operation on subobjects (embeded structs for now)
     for (QSharedPointer<ZTreeNode> node : struc->children)
