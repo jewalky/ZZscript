@@ -1578,11 +1578,12 @@ void Parser::highlightExpression(QSharedPointer<ZExpression> expr, QSharedPointe
                 ParserToken::TokenType t;
                 if (resolved)
                 {
+                    QSharedPointer<ZTreeNode> resolvedParent = resolved->parent.toStrongRef();
                     t = ParserToken::Local;
                     switch (resolved->type())
                     {
                     case ZTreeNode::LocalVariable:
-                        t = (resolved->parent && resolved->parent->type() == ZTreeNode::Method) ? ParserToken::Argument : ParserToken::Local;
+                        t = (resolvedParent && resolvedParent->type() == ZTreeNode::Method) ? ParserToken::Argument : ParserToken::Local;
                         if (!firstSymbol.compare("self", Qt::CaseInsensitive) || !firstSymbol.compare("invoker", Qt::CaseInsensitive) ||
                                 !firstSymbol.compare("super", Qt::CaseInsensitive))
                             t = ParserToken::Keyword;
@@ -1764,6 +1765,7 @@ void Parser::highlightExpression(QSharedPointer<ZExpression> expr, QSharedPointe
             QSharedPointer<ZTreeNode> resolved = resolveSymbol(leaf.token.value, parent, context);
             if (resolved)
             {
+                QSharedPointer<ZTreeNode> resolvedParent = resolved->parent.toStrongRef();
                 ParserToken::TokenType t = ParserToken::Local;
                 switch (resolved->type())
                 {
@@ -1771,7 +1773,7 @@ void Parser::highlightExpression(QSharedPointer<ZExpression> expr, QSharedPointe
                     t = ParserToken::ConstantName;
                     break;
                 case ZTreeNode::LocalVariable:
-                    t = (resolved->parent && resolved->parent->type() == ZTreeNode::Method) ? ParserToken::Argument : ParserToken::Local;
+                    t = (resolvedParent && resolvedParent->type() == ZTreeNode::Method) ? ParserToken::Argument : ParserToken::Local;
                     break;
                 case ZTreeNode::Field:
                     t = ParserToken::Field;

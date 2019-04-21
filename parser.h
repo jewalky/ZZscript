@@ -32,7 +32,7 @@ public:
         SystemType
     };
 
-    QSharedPointer<ZTreeNode> parent;
+    QWeakPointer<ZTreeNode> parent;
     QString identifier;
     QList<QSharedPointer<ZTreeNode>> children;
     bool isValid;

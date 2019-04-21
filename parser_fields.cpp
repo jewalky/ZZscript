@@ -585,7 +585,7 @@ bool Parser::parseCompoundType(TokenStream& stream, ZCompoundType& type, QShared
             qDebug("parseCompoundType: warning: unresolved type %s", token.value.toUtf8().data());
         }
 
-        if (lastType && (!lastType->parent || lastType->parent->type() == ZTreeNode::FileRoot))
+        if (lastType && (!lastType->parent.toStrongRef() || lastType->parent.toStrongRef()->type() == ZTreeNode::FileRoot))
             prependContext = "";
 
         if (!lastType)

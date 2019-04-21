@@ -115,7 +115,8 @@ void Document::save()
         QList<Parser*> parsers;
         for (QSharedPointer<ZTreeNode> node : allTypes)
         {
-            QSharedPointer<ZFileRoot> root = node->parent.dynamicCast<ZFileRoot>();
+            QSharedPointer<ZTreeNode> nodeParent = node->parent.toStrongRef();
+            QSharedPointer<ZFileRoot> root = nodeParent.dynamicCast<ZFileRoot>();
             if (!root) continue;
             Parser* ownParser = root->parser;
             if (!parsers.contains(ownParser))
@@ -545,7 +546,8 @@ QString DocumentEditor::makeTokenTooltip(ParserToken* tok)
             QSharedPointer<ZLocalVariable> local = tok->reference.dynamicCast<ZLocalVariable>();
             QString addauto = local->hasType ? "" : "auto ";
             QString typeclass = " (unresolved "+addauto+"type) ";
-            if (local->parent && local->parent->type() == ZTreeNode::Method)
+            QSharedPointer<ZTreeNode> localParent = local->parent.toStrongRef();
+            if (localParent && localParent->type() == ZTreeNode::Method)
                 typelocal = "<b>Argument</b>";
             // get type of variable if present
             ZCompoundType vtype = local->varType;
