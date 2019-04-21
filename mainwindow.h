@@ -32,6 +32,11 @@ public:
 public slots:
     void projectTreeDoubleClicked(QTreeWidgetItem* item, int column);
 
+private slots:
+    void on_actionQuit_triggered();
+
+    void on_actionSave_File_triggered();
+
 private:
     Ui::MainWindow *ui;
     static MainWindow *ptr;

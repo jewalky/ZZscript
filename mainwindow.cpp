@@ -206,3 +206,17 @@ void MainWindow::projectTreeDoubleClicked(QTreeWidgetItem* item, int column)
     ui->editorTabs->setTabText(ui->editorTabs->indexOf(tab), doc->location);
     ui->editorTabs->setCurrentWidget(tab);
 }
+
+void MainWindow::on_actionQuit_triggered()
+{
+    // todo check for unsaved files
+    close();
+}
+
+void MainWindow::on_actionSave_File_triggered()
+{
+    // get current tab and store to filesystem
+    DocumentTab* tab = qobject_cast<DocumentTab*>(ui->editorTabs->currentWidget());
+    if (!tab) return;
+    tab->document()->save();
+}

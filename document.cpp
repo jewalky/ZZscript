@@ -54,6 +54,7 @@ void Document::reparse()
     allTypes.append(parser->getOwnTypeInformation());
     parser->setTypeInformation(allTypes);
 
+    // field pass
     for (QSharedPointer<ZTreeNode> node : parser->root->children)
     {
         if (node->type() == ZTreeNode::Class)
@@ -66,7 +67,7 @@ void Document::reparse()
         }
     }
 
-    // later this also needs to be done outside of the parser after all fields are processed
+    // method pass
     for (QSharedPointer<ZTreeNode> node : parser->root->children)
     {
         if (node->type() == ZTreeNode::Class)
@@ -80,6 +81,71 @@ void Document::reparse()
     }
 
     parsedTokens = parser->parsedTokens;
+
+    // to-do: if we ctrl+s, it's a good idea to update all other code (that might try to reference the new class)
+}
+
+void Document::save()
+{
+    // take contents, save to disk
+    if (isnew) return; // do nothing for now.. later make a popup window asking for save path
+    QFile f(fullPath);
+    if (f.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate))
+    {
+        //
+        f.write(contents.toUtf8());
+        // and once done, force reparse for all the types
+        // note: this is not very good coding. need to retrieve parser in some more direct way
+        // also, later we need to check that only current project (and below) is reloaded.
+        // we don't need to reparse gzdoom.pk3 just because some user code was modified.
+        //
+        reparse();
+        QList<QSharedPointer<ZTreeNode>> allTypes = parser->getTypeInformation();
+        QList<Parser*> parsers;
+        for (QSharedPointer<ZTreeNode> node : allTypes)
+        {
+            QSharedPointer<ZFileRoot> root = node->parent.dynamicCast<ZFileRoot>();
+            if (!root) continue;
+            Parser* ownParser = root->parser;
+            if (!parsers.contains(ownParser))
+                parsers.append(ownParser);
+        }
+        for (Parser* p : parsers)
+        {
+            p->parse();
+            p->setTypeInformation(allTypes);
+
+            // field pass
+            for (QSharedPointer<ZTreeNode> node : parser->root->children)
+            {
+                if (node->type() == ZTreeNode::Class)
+                {
+                    parser->parseClassFields(node.dynamicCast<ZClass>());
+                }
+                else if (node->type() == ZTreeNode::Struct)
+                {
+                    parser->parseStructFields(node.dynamicCast<ZStruct>());
+                }
+            }
+
+            // method pass
+            for (QSharedPointer<ZTreeNode> node : parser->root->children)
+            {
+                if (node->type() == ZTreeNode::Class)
+                {
+                    parser->parseClassMethods(node.dynamicCast<ZClass>());
+                }
+                else if (node->type() == ZTreeNode::Struct)
+                {
+                    parser->parseStructMethods(node.dynamicCast<ZStruct>());
+                }
+            }
+        }
+    }
+    else
+    {
+        qDebug("could not save into %s", fullPath.toUtf8().data());
+    }
 }
 
 void Document::setTab(DocumentTab* tab)
@@ -500,4 +566,9 @@ QString DocumentEditor::makeTokenTooltip(ParserToken* tok)
     }
 
     return "";
+}
+
+void DocumentEditor::showEvent(QShowEvent* event)
+{
+    onTextChanged();
 }

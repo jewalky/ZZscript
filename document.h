@@ -18,6 +18,7 @@ public:
     void parse();
     void reparse();
     void setTab(DocumentTab* tab);
+    void save();
     DocumentTab* getTab();
 
     void syncFromSource(ProjectFile* pf = nullptr);
@@ -70,6 +71,7 @@ public:
 
     void contextMenuEvent(QContextMenuEvent *event) override;
     bool event(QEvent* event) override;
+    void showEvent(QShowEvent* event) override;
 
 public slots:
     void onTextChanged();

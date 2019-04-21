@@ -51,6 +51,8 @@ ZTreeNode::~ZTreeNode()
 static void dumpType(ZStruct*, int);
 bool Parser::parse()
 {
+    parsedTokens.clear();
+
     // first off, remove all comments
     for (int i = 0; i < tokens.size(); i++)
     {
