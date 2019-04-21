@@ -606,6 +606,8 @@ private:
     QSharedPointer<ZCondition> parseCondition(TokenStream& stream, QSharedPointer<ZTreeNode> parent, QSharedPointer<ZStruct> context);
     // magic
     void highlightExpression(QSharedPointer<ZExpression> expr, QSharedPointer<ZTreeNode> parent, QSharedPointer<ZStruct> context);
+    // parseEnumExpressions parses expressions in enums. logically this belongs to the same step as parseClassMethods
+    bool parseEnumExpressions(QSharedPointer<ZEnum> enm, QSharedPointer<ZStruct> context);
 
     enum
     {

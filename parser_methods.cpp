@@ -3,6 +3,16 @@
 
 bool Parser::parseObjectMethods(QSharedPointer<ZClass> cls, QSharedPointer<ZStruct> struc)
 {
+    // go through enums
+    for (QSharedPointer<ZTreeNode> node : struc->children)
+    {
+        if (node->type() != ZTreeNode::Enum)
+            continue;
+
+        QSharedPointer<ZEnum> enm = node.dynamicCast<ZEnum>();
+        parseEnumExpressions(enm, struc);
+    }
+
     // go through methods
     for (QSharedPointer<ZTreeNode> node : struc->children)
     {
@@ -554,4 +564,11 @@ QSharedPointer<ZCodeBlock> Parser::parseCodeBlockOrLine(TokenStream& stream, QSh
         }
         return block;
     }
+}
+
+bool Parser::parseEnumExpressions(QSharedPointer<ZEnum> enm, QSharedPointer<ZStruct> context)
+{
+    for (QPair<QString, QSharedPointer<ZExpression>> p : enm->values)
+        highlightExpression(p.second, nullptr, context);
+    return true;
 }
