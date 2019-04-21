@@ -428,6 +428,7 @@ bool Parser::parseObjectFields(QSharedPointer<ZClass> cls, QSharedPointer<ZStruc
                         qDebug("parseObjectFields: expected valid default value expression for '%s' at line %d", arg_name.toUtf8().data(), token.line);
                         return false;
                     }
+                    highlightExpression(dexpr, nullptr, struc);
 
                     skipWhitespace(stream, true);
                     // expect comma or closing parenthesis now
