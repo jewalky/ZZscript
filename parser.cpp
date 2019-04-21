@@ -68,6 +68,7 @@ bool Parser::parse()
     }
 
     root = new ZFileRoot(nullptr);
+    root->parser = this;
     root->isValid = true;
 
     TokenStream stream(tokens);
@@ -79,46 +80,6 @@ bool Parser::parse()
 
     if (!parseRoot(stream))
         return false;
-
-    //
-    QList<ZTreeNode*> types;
-    for (ZTreeNode* node : root->children)
-    {
-        if (node->type() == ZTreeNode::Class || node->type() == ZTreeNode::Struct || node->type() == ZTreeNode::Enum)
-            types.append(reinterpret_cast<ZStruct*>(node));
-    }
-    setTypeInformation(types);
-
-    // for debug:
-    // later this needs to be done outside of the parser after includes are processed!
-    for (ZTreeNode* node : root->children)
-    {
-        if (node->type() == ZTreeNode::Class)
-        {
-            if (!parseClassFields(reinterpret_cast<ZClass*>(node)))
-                return false;
-        }
-        else if (node->type() == ZTreeNode::Struct)
-        {
-            if (!parseStructFields(reinterpret_cast<ZStruct*>(node)))
-                return false;
-        }
-    }
-
-    // later this also needs to be done outside of the parser after all fields are processed
-    for (ZTreeNode* node : root->children)
-    {
-        if (node->type() == ZTreeNode::Class)
-        {
-            if (!parseClassMethods(reinterpret_cast<ZClass*>(node)))
-                return false;
-        }
-        else if (node->type() == ZTreeNode::Struct)
-        {
-            if (!parseStructMethods(reinterpret_cast<ZStruct*>(node)))
-                return false;
-        }
-    }
 
     return true;
 }
@@ -325,6 +286,12 @@ ZSystemType* Parser::resolveSystemType(QString name)
 
 ZTreeNode* Parser::resolveSymbol(QString name, ZTreeNode* parent, ZStruct* context)
 {
+    if (name == "self")
+    {
+        if (context) return context->self;
+        return nullptr; // invalid
+    }
+
     // first, look in all parent scopes
     ZTreeNode* p = parent;
     while (p)
@@ -374,4 +341,26 @@ ZTreeNode* Parser::resolveSymbol(QString name, ZTreeNode* parent, ZStruct* conte
     // todo check global constants, but not yet
 
     return nullptr;
+}
+
+QList<ZTreeNode*> Parser::getOwnTypeInformation()
+{
+    QList<ZTreeNode*> types;
+    for (ZTreeNode* node : root->children)
+    {
+        if (node->type() == ZTreeNode::Class || node->type() == ZTreeNode::Struct || node->type() == ZTreeNode::Enum)
+            types.append(reinterpret_cast<ZStruct*>(node));
+    }
+    return types;
+}
+
+QList<ZTreeNode*> Parser::getTypeInformation()
+{
+    return types;
+}
+
+ZStruct::~ZStruct()
+{
+    if (self) delete self;
+    self = nullptr;
 }

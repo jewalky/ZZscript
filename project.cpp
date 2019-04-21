@@ -61,3 +61,180 @@ QString Project::fixPath(QString path)
     }
     return path;
 }
+
+bool Project::parseProject()
+{
+    bool allok = true;
+    // find zscript.txt
+    QList<ProjectFile*> zsFiles;
+    QStringList includeTree;
+    QStringList allIncludes;
+    bool rootfound = false;
+    for (ProjectFile& f : files)
+    {
+        if (f.relativePath == projectName + "/zscript.txt")
+        {
+            zsFiles.append(&f);
+            f.fileType = ProjectFile::ZScript;
+            // parse file
+            bool thisok = f.parse();
+            allok &= thisok;
+            if (!thisok)
+                qDebug("parseProject: %s/zscript.txt failed", projectName.toUtf8().data());
+            rootfound = true;
+            allIncludes.append(f.relativePath);
+            // find and add includes
+            if (f.parser && f.parser->root)
+            {
+                for (ZTreeNode* node : f.parser->root->children)
+                {
+                    if (node->type() == ZTreeNode::Include)
+                    {
+                        ZInclude* inc = reinterpret_cast<ZInclude*>(node);
+                        includeTree.append(inc->location);
+                    }
+                }
+            }
+            break;
+        }
+    }
+
+    if (!rootfound)
+    {
+        qDebug("parseProject: %s/zscript.txt not found", projectName.toUtf8().data());
+        return false;
+    }
+
+    if (includeTree.size())
+    {
+        do
+        {
+            bool incfound = false;
+            QString currentInclude = includeTree.first();
+            if (allIncludes.contains(projectName + "/" + currentInclude))
+            {
+                qDebug("parseProject: circular include %s/%s", projectName.toUtf8().data(), currentInclude.toUtf8().data());
+                includeTree.removeFirst();
+                continue;
+            }
+            for (ProjectFile& f : files)
+            {
+                if (f.relativePath == projectName + "/" + currentInclude)
+                {
+                    zsFiles.append(&f);
+                    f.fileType = ProjectFile::ZScript;
+                    // parse file
+                    bool thisok = f.parse();
+                    allok &= thisok;
+                    if (!thisok)
+                        qDebug("parseProject: %s/%s failed", projectName.toUtf8().data(), currentInclude.toUtf8().data());
+                    includeTree.removeFirst();
+                    incfound = true;
+                    allIncludes.append(f.relativePath);
+                    // find and add includes
+                    if (f.parser && f.parser->root)
+                    {
+                        for (ZTreeNode* node : f.parser->root->children)
+                        {
+                            if (node->type() == ZTreeNode::Include)
+                            {
+                                ZInclude* inc = reinterpret_cast<ZInclude*>(node);
+                                includeTree.append(inc->location);
+                            }
+                        }
+                    }
+                    break;
+                }
+            }
+
+            if (!incfound)
+            {
+                qDebug("parseProject: %s/%s not found", projectName.toUtf8().data(), currentInclude.toUtf8().data());
+                allok = false;
+            }
+        }
+        while (includeTree.size());
+    }
+
+    allok &= parseProjectClasses(); // this can be separate from parseProject
+    return allok;
+}
+
+bool Project::parseProjectClasses()
+{
+    QList<ZTreeNode*> allTypes;
+    for (ProjectFile& f : files)
+    {
+        if (!f.parser) continue;
+        QList<ZTreeNode*> localTypes = f.parser->getOwnTypeInformation();
+        allTypes.append(localTypes);
+    }
+
+    bool allok = true;
+    for (ProjectFile& f : files)
+    {
+        if (!f.parser) continue;
+        f.parser->setTypeInformation(allTypes);
+
+        for (ZTreeNode* node : f.parser->root->children)
+        {
+            if (node->type() == ZTreeNode::Class)
+            {
+                allok &= f.parser->parseClassFields(reinterpret_cast<ZClass*>(node));
+            }
+            else if (node->type() == ZTreeNode::Struct)
+            {
+                allok &= f.parser->parseStructFields(reinterpret_cast<ZStruct*>(node));
+            }
+        }
+
+        // later this also needs to be done outside of the parser after all fields are processed
+        for (ZTreeNode* node : f.parser->root->children)
+        {
+            if (node->type() == ZTreeNode::Class)
+            {
+                allok &= f.parser->parseClassMethods(reinterpret_cast<ZClass*>(node));
+            }
+            else if (node->type() == ZTreeNode::Struct)
+            {
+                allok &= f.parser->parseStructMethods(reinterpret_cast<ZStruct*>(node));
+            }
+        }
+    }
+
+    return allok;
+}
+
+bool ProjectFile::parse()
+{
+    if (parser) delete parser;
+    parser = nullptr;
+
+    // read file
+    QFileInfo fi(fullPath);
+    if (!fi.isFile())
+        return false;
+
+    //
+    QFile f(fullPath);
+    if (f.open(QIODevice::ReadOnly|QIODevice::Text))
+    {
+        contents = f.readAll();
+
+        Tokenizer t(contents);
+        QList<Tokenizer::Token> tokens = t.readAllTokens();
+        parser = new Parser(tokens);
+
+        f.close();
+        bool okparsed = parser->parse();
+        if (parser->root)
+        {
+            parser->root->fullPath = fullPath;
+            parser->root->relativePath = relativePath;
+        }
+
+        return okparsed;
+    }
+
+    return false; // failed to open
+}

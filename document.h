@@ -7,6 +7,7 @@
 #include <QContextMenuEvent>
 #include "tokenizer.h"
 #include "parser.h"
+#include "project.h"
 
 class DocumentTab;
 class Document
@@ -15,10 +16,11 @@ public:
     Document(DocumentTab* tab = nullptr);
 
     void parse();
+    void reparse();
     void setTab(DocumentTab* tab);
     DocumentTab* getTab();
 
-    void syncFromSource();
+    void syncFromSource(ProjectFile* pf = nullptr);
 
     bool isnew;
     QString fullPath;

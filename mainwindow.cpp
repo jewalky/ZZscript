@@ -159,6 +159,7 @@ void MainWindow::loadProject(QString path)
     if (project) delete project;
     project = new Project(path);
     reloadTreeFromProject();
+    project->parseProject();
 }
 
 Project* MainWindow::getProject()
@@ -183,12 +184,24 @@ void MainWindow::projectTreeDoubleClicked(QTreeWidgetItem* item, int column)
         }
     }
 
+    // get project file
+    ProjectFile* pf = nullptr;
+    for (ProjectFile& spf : project->files)
+    {
+        if (spf.fullPath == filePath)
+        {
+            pf = &spf;
+            break;
+        }
+    }
+
     Document* doc = createDocument();
     doc->isnew = false;
     QStringList pathSep = filePath.split('/');
     doc->location = pathSep.last();
     doc->fullPath = filePath;
-    doc->syncFromSource();
+    doc->syncFromSource(pf);
+    // now, if there is a project, this means we can pull parsed data from there
     DocumentTab* tab = doc->getTab();
     ui->editorTabs->setTabText(ui->editorTabs->indexOf(tab), doc->location);
     ui->editorTabs->setCurrentWidget(tab);

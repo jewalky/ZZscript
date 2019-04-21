@@ -21,6 +21,7 @@ struct ProjectFile
 
     ProjectFileType fileType;
 
+    QString contents;
     Parser* parser;
 
     ProjectFile()
@@ -33,6 +34,8 @@ struct ProjectFile
         if (parser) delete parser;
         parser = nullptr;
     }
+
+    bool parse();
 };
 
 class Project
@@ -46,6 +49,7 @@ public:
     static QString fixPath(QString path);
 
     bool parseProject();
+    bool parseProjectClasses();
 
 private:
     void readDir(QString basePath, QString relativeBasePath);

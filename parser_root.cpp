@@ -33,6 +33,7 @@ bool Parser::parseRoot(TokenStream& stream)
 
         if (token.type == Tokenizer::Preprocessor) // #
         {
+            parsedTokens.append(ParserToken(token, ParserToken::Preprocessor));
             skipWhitespace(stream, false);
             if (!stream.expectToken(token, Tokenizer::Identifier))
             {
@@ -44,12 +45,14 @@ bool Parser::parseRoot(TokenStream& stream)
             // answer: NO. use const
             if (token.value == "include")
             {
+                parsedTokens.append(ParserToken(token, ParserToken::Preprocessor));
                 skipWhitespace(stream, false);
                 if (!stream.expectToken(token, Tokenizer::String))
                 {
                     qDebug("invalid include at line %d - expected filename", token.line);
                     return false; // for now abort, but later - just ignore the token
                 }
+                parsedTokens.append(ParserToken(token, ParserToken::Preprocessor));
 
                 ZInclude* incl = new ZInclude(root);
                 incl->location = token.value;
@@ -274,6 +277,14 @@ ZClass* Parser::parseClass(TokenStream& stream, bool extend)
         cls->version = c_version;
         cls->deprecated = c_deprecated;
         cls->isValid = true;
+
+        // initialize "self" variable
+        ZLocalVariable* self = new ZLocalVariable(cls);
+        self->varType.type = cls->identifier;
+        self->varType.reference = cls;
+        self->identifier = "self";
+        cls->self = self;
+
         return cls;
     }
     else
@@ -389,6 +400,14 @@ ZStruct* Parser::parseStruct(TokenStream& stream)
         struc->version = s_version;
         struc->deprecated = s_deprecated;
         struc->isValid = true;
+
+        // initialize "self" variable
+        ZLocalVariable* self = new ZLocalVariable(struc);
+        self->varType.type = struc->identifier;
+        self->varType.reference = struc;
+        self->identifier = "self";
+        struc->self = self;
+
         return struc;
     }
     else

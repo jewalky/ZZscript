@@ -40,6 +40,7 @@ struct ZTreeNode
     virtual NodeType type() { return Generic; }
 };
 
+class Parser;
 struct ZFileRoot : public ZTreeNode
 {
     ZFileRoot(ZTreeNode* p) : ZTreeNode(p) {}
@@ -48,6 +49,11 @@ struct ZFileRoot : public ZTreeNode
     // this is the API version to use for parsing and compat separation
     // if not specified, defaults to 2.8 IIRC
     QString version;
+    QString fullPath;
+    QString relativePath;
+
+    //
+    Parser* parser;
 };
 
 struct ZInclude : public ZTreeNode
@@ -271,7 +277,8 @@ struct ZMethod : public ZTreeNode
 
 struct ZStruct : public ZTreeNode
 {
-    ZStruct(ZTreeNode* p) : ZTreeNode(p) {}
+    ZStruct(ZTreeNode* p) : ZTreeNode(p) { self = nullptr; }
+    virtual ~ZStruct();
     virtual NodeType type() { return Struct; }
 
     QString version;
@@ -280,6 +287,8 @@ struct ZStruct : public ZTreeNode
     // after parseRoot, but before parseObjectFields
     QList<Tokenizer::Token> tokens;
     int lineNumber;
+
+    ZLocalVariable* self;
 
     // children = ZField, ZConstant, ZProperty.. (for classes)
 };
@@ -518,6 +527,9 @@ public:
 
     //
     static ZSystemType* resolveSystemType(QString name);
+
+    QList<ZTreeNode*> getOwnTypeInformation();
+    QList<ZTreeNode*> getTypeInformation();
 
 private:
     QList<Tokenizer::Token> tokens;

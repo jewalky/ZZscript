@@ -1628,6 +1628,9 @@ void Parser::highlightExpression(ZExpression* expr, ZTreeNode* parent, ZStruct* 
                     {
                     case ZTreeNode::LocalVariable:
                         t = (resolved->parent && resolved->parent->type() == ZTreeNode::Method) ? ParserToken::Argument : ParserToken::Local;
+                        if (!firstSymbol.compare("self", Qt::CaseInsensitive) || !firstSymbol.compare("invoker", Qt::CaseInsensitive) ||
+                                !firstSymbol.compare("super", Qt::CaseInsensitive))
+                            t = ParserToken::Keyword;
                         break;
                     case ZTreeNode::Field:
                         t = ParserToken::Field;

@@ -37,6 +37,51 @@ void Document::parse()
     parsedTokens = parser->parsedTokens;
 }
 
+void Document::reparse()
+{
+    if (!parser) return;
+
+    // get current types
+    QList<ZTreeNode*> allTypes = parser->getTypeInformation();
+    QList<ZTreeNode*> ownTypes = parser->getOwnTypeInformation();
+    for (ZTreeNode* ownType : ownTypes)
+        allTypes.removeAll(ownType);
+    delete parser;
+    Tokenizer tok(contents);
+    tokens = tok.readAllTokens();
+    parser = new Parser(tokens);
+    parser->parse();
+    allTypes.append(parser->getOwnTypeInformation());
+    parser->setTypeInformation(allTypes);
+
+    for (ZTreeNode* node : parser->root->children)
+    {
+        if (node->type() == ZTreeNode::Class)
+        {
+            parser->parseClassFields(reinterpret_cast<ZClass*>(node));
+        }
+        else if (node->type() == ZTreeNode::Struct)
+        {
+            parser->parseStructFields(reinterpret_cast<ZStruct*>(node));
+        }
+    }
+
+    // later this also needs to be done outside of the parser after all fields are processed
+    for (ZTreeNode* node : parser->root->children)
+    {
+        if (node->type() == ZTreeNode::Class)
+        {
+            parser->parseClassMethods(reinterpret_cast<ZClass*>(node));
+        }
+        else if (node->type() == ZTreeNode::Struct)
+        {
+            parser->parseStructMethods(reinterpret_cast<ZStruct*>(node));
+        }
+    }
+
+    parsedTokens = parser->parsedTokens;
+}
+
 void Document::setTab(DocumentTab* tab)
 {
     if (this->tab) return;
@@ -48,9 +93,24 @@ DocumentTab* Document::getTab()
     return tab;
 }
 
-void Document::syncFromSource()
+void Document::syncFromSource(ProjectFile* pf)
 {
     if (isnew) return;
+
+    if (pf)
+    {
+        contents = pf->contents;
+        parser = pf->parser;
+        parsedTokens = parser->parsedTokens;
+        if (tab)
+        {
+            DocumentEditor* editor = tab->getEditor();
+            editor->setPlainText(contents);
+            editor->textChanged();
+        }
+        return;
+    }
+
     qDebug("path = %s", fullPath.toUtf8().data());
     QFileInfo fi(fullPath);
     if (!fi.isFile())
@@ -62,13 +122,11 @@ void Document::syncFromSource()
     {
         contents = f.readAll();
 
-        qDebug("loaded");
         if (tab)
         {
             DocumentEditor* editor = tab->getEditor();
             editor->setPlainText(contents);
             editor->textChanged();
-            qDebug("updated");
         }
 
         f.close();
@@ -100,7 +158,6 @@ DocumentEditor::DocumentEditor(QWidget* parent) : QPlainTextEdit(parent)
     f.setFamily("Courier");
     QFontMetricsF metrics(f);
     setTabStopDistance(metrics.width(' ')*tabStop);
-    qDebug("single = %f", metrics.width(' '));
 
     processing = false;
 }
@@ -131,10 +188,13 @@ void DocumentEditor::onTextChanged()
     Document* doc = tab->document();
     assert(doc != nullptr);
     doc->contents = newText;
+    /*
     QTime elTimer;
     elTimer.start();
     doc->parse();
-    qDebug("parsing done in %d ms", elTimer.elapsed());
+    qDebug("parsing done in %d ms", elTimer.elapsed());*/
+    // reparse this document
+    doc->reparse();
 
     this->setUpdatesEnabled(false);
     processing = true;
