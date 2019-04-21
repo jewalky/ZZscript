@@ -11,8 +11,16 @@
 Document::Document(DocumentTab* tab)
 {
     isnew = false;
+    ownparser = true;
     parser = nullptr;
     this->tab = tab;
+}
+
+Document::~Document()
+{
+    if (parser && ownparser)
+        delete parser;
+    parser = nullptr;
 }
 
 void Document::parse()
@@ -31,7 +39,8 @@ void Document::parse()
     //         - code[]
     //           ...
     //     - constants[]
-    if (parser) delete parser;
+    if (parser && ownparser) delete parser;
+    ownparser = true;
     parser = new Parser(tokens);
     parser->parse();
     parsedTokens = parser->parsedTokens;
@@ -46,10 +55,12 @@ void Document::reparse()
     QList<QSharedPointer<ZTreeNode>> ownTypes = parser->getOwnTypeInformation();
     for (QSharedPointer<ZTreeNode> ownType : ownTypes)
         allTypes.removeAll(ownType);
-    delete parser;
+    if (ownparser)
+        delete parser;
     Tokenizer tok(contents);
     tokens = tok.readAllTokens();
     parser = new Parser(tokens);
+    ownparser = true;
     parser->parse();
     allTypes.append(parser->getOwnTypeInformation());
     parser->setTypeInformation(allTypes);
@@ -167,6 +178,7 @@ void Document::syncFromSource(ProjectFile* pf)
     {
         contents = pf->contents;
         parser = pf->parser;
+        ownparser = false;
         parsedTokens = parser->parsedTokens;
         if (tab)
         {
@@ -176,6 +188,11 @@ void Document::syncFromSource(ProjectFile* pf)
         }
         return;
     }
+
+    if (ownparser && parser)
+        delete parser;
+    ownparser = true;
+    parser = nullptr;
 
     qDebug("path = %s", fullPath.toUtf8().data());
     QFileInfo fi(fullPath);

@@ -21,7 +21,18 @@ bool Parser::parseObjectMethods(QSharedPointer<ZClass> cls, QSharedPointer<ZStru
         rootBlock->parent = method;
         method->children.append(rootBlock);
     }
-    return true;
+
+    // go through subobjects (embedded structs) and parse their methods too
+    bool allok = true;
+    for (QSharedPointer<ZTreeNode> node : struc->children)
+    {
+        if (node->type() == ZTreeNode::Struct)
+            allok &= parseStructMethods(node.dynamicCast<ZStruct>());
+        else if (node->type() == ZTreeNode::Class) // wtf?
+            allok &= parseStructMethods(node.dynamicCast<ZClass>());
+    }
+
+    return allok;
 }
 
 QSharedPointer<ZCodeBlock> Parser::parseCodeBlock(TokenStream& stream, QSharedPointer<ZTreeNode> parent, QSharedPointer<ZStruct> context)

@@ -14,6 +14,7 @@ class Document
 {
 public:
     Document(DocumentTab* tab = nullptr);
+    ~Document();
 
     void parse();
     void reparse();
@@ -33,6 +34,7 @@ public:
 private:
     // parsed tokens and such are valid until reparse
     Parser* parser;
+    bool ownparser;
     DocumentTab* tab;
 };
 

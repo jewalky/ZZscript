@@ -37,6 +37,8 @@ private slots:
 
     void on_actionSave_File_triggered();
 
+    void on_actionClose_File_triggered();
+
 private:
     Ui::MainWindow *ui;
     static MainWindow *ptr;

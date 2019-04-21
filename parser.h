@@ -94,6 +94,7 @@ public:
 
     ZSystemType& operator=(const ZSystemType& other)
     {
+        identifier = other.identifier;
         kind = other.kind;
         size = other.size;
         replaceType = other.replaceType;
@@ -588,8 +589,8 @@ private:
     // these occur at the root scope
     bool parseRoot(TokenStream& stream);
     QSharedPointer<ZClass> parseClass(TokenStream& stream, bool extend);
-    QSharedPointer<ZStruct> parseStruct(TokenStream& stream);
-    QSharedPointer<ZEnum> parseEnum(TokenStream& stream);
+    QSharedPointer<ZStruct> parseStruct(TokenStream& stream, QSharedPointer<ZStruct> parent);
+    QSharedPointer<ZEnum> parseEnum(TokenStream& stream, QSharedPointer<ZStruct> parent);
 
     // this occurs in the class and struct body
     bool parseCompoundType(TokenStream& stream, ZCompoundType& type, QSharedPointer<ZStruct> context);

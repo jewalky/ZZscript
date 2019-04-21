@@ -1,1 +1,8 @@
 #include "ZZ_ZForms/Include.zsc"
+
+class C
+{
+  struct S
+  {
+  }
+}

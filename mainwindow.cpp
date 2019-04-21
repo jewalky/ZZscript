@@ -220,3 +220,13 @@ void MainWindow::on_actionSave_File_triggered()
     if (!tab) return;
     tab->document()->save();
 }
+
+void MainWindow::on_actionClose_File_triggered()
+{
+    // todo check for unsaved files
+    DocumentTab* tab = qobject_cast<DocumentTab*>(ui->editorTabs->currentWidget());
+    if (!tab) return;
+    Document* doc = tab->document();
+    delete tab;
+    delete doc;
+}

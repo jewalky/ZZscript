@@ -25,7 +25,8 @@ bool Parser::parseObjectFields(QSharedPointer<ZClass> cls, QSharedPointer<ZStruc
                                                         <<"protected"<<"readonly"<<"transient"<<"ui"<<"version"<<"virtual"<<"override"
                                                        <<"virtualscope"<<"vararg"<<"final"<<"clearscope"<<"action"<<"static"<<"const";
 
-        stream.peekToken(token);
+        if (!stream.peekToken(token))
+            break;
         token.makeLower();
         int lineno = token.line;
 
@@ -33,14 +34,24 @@ bool Parser::parseObjectFields(QSharedPointer<ZClass> cls, QSharedPointer<ZStruc
         {
             parsedTokens.append(ParserToken(token, ParserToken::Keyword));
             stream.setPosition(stream.position()+1);
-            QSharedPointer<ZEnum> enm = parseEnum(stream);
+            QSharedPointer<ZEnum> enm = parseEnum(stream, struc);
             if (!enm)
-            {
                 return false;
-            }
             enm->parent = struc;
             enm->lineNumber = lineno;
             struc->children.append(enm);
+            continue;
+        }
+        else if (token.value == "struct")
+        {
+            parsedTokens.append(ParserToken(token, ParserToken::Keyword));
+            stream.setPosition(stream.position()+1);
+            QSharedPointer<ZStruct> subStruc = parseStruct(stream, struc);
+            if (!subStruc)
+                return false;
+            subStruc->parent = struc;
+            subStruc->lineNumber = lineno;
+            struc->children.append(subStruc);
             continue;
         }
         else if (token.value == "const")
@@ -522,6 +533,18 @@ bool Parser::parseObjectFields(QSharedPointer<ZClass> cls, QSharedPointer<ZStruc
             struc->children.append(method);
         }
     }
+
+    bool allok = true;
+    // now that all object fields are parsed, we need to also call this operation on subobjects (embeded structs for now)
+    for (QSharedPointer<ZTreeNode> node : struc->children)
+    {
+        if (node->type() == ZTreeNode::Struct)
+            allok &= parseStructFields(node.dynamicCast<ZStruct>());
+        else if (node->type() == ZTreeNode::Class) // wtf?
+            allok &= parseClassFields(node.dynamicCast<ZClass>());
+    }
+
+    return allok;
 }
 
 bool Parser::parseCompoundType(TokenStream& stream, ZCompoundType& type, QSharedPointer<ZStruct> context)

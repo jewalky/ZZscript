@@ -185,7 +185,9 @@ void Parser::setTypeInformation(QList<QSharedPointer<ZTreeNode>> _types)
         if (struc->type() != ZTreeNode::Class)
             continue;
         QSharedPointer<ZClass> cls = struc.dynamicCast<ZClass>();
-        if (!cls->extendName.isEmpty() || !cls->parentName.isEmpty() || !cls->replaceName.isEmpty())
+        if ((!cls->extendName.isEmpty() && !cls->extendReference) ||
+            (!cls->parentName.isEmpty() && !cls->parentReference) ||
+            (!cls->replaceName.isEmpty() && !cls->replaceReference))
         {
             for (QSharedPointer<ZTreeNode> struc2 : types)
             {

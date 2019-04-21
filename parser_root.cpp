@@ -93,24 +93,27 @@ bool Parser::parseRoot(TokenStream& stream)
                 if (!cls)
                     return false;
                 cls->parent = root;
+                cls->lineNumber = token.line;
                 root->children.append(cls);
             }
             else if (token.value == "struct")
             {
                 parsedTokens.append(ParserToken(token, ParserToken::Keyword));
-                QSharedPointer<ZStruct> struc = parseStruct(stream);
+                QSharedPointer<ZStruct> struc = parseStruct(stream, nullptr);
                 if (!struc)
                     return false;
                 struc->parent = root;
+                struc->lineNumber = token.line;
                 root->children.append(struc);
             }
             else if (token.value == "enum")
             {
                 parsedTokens.append(ParserToken(token, ParserToken::Keyword));
-                QSharedPointer<ZEnum> enm = parseEnum(stream);
+                QSharedPointer<ZEnum> enm = parseEnum(stream, nullptr);
                 if (!enm)
                     return false;
                 enm->parent = root;
+                enm->lineNumber = token.line;
                 root->children.append(enm);
             }
             else
@@ -294,12 +297,21 @@ QSharedPointer<ZClass> Parser::parseClass(TokenStream& stream, bool extend)
     }
 }
 
-QSharedPointer<ZStruct> Parser::parseStruct(TokenStream& stream)
+QSharedPointer<ZStruct> Parser::parseStruct(TokenStream& stream, QSharedPointer<ZStruct> parent)
 {
     QString s_structName;
     QList<QString> s_flags;
     QString s_version;
     QString s_deprecated;
+
+    QString parentsPrefix = "";
+    QSharedPointer<ZTreeNode> p = parent;
+    while (p)
+    {
+        if (p->type() == ZTreeNode::Class || p->type() == ZTreeNode::Struct)
+            parentsPrefix = p->identifier + "." + parentsPrefix;
+        p = p->parent;
+    }
 
     // similar to class, but even simplier.
     // struct <name> [<flag1> [<flag2> [<flag3> ...]]] (or version("..."))
@@ -313,7 +325,7 @@ QSharedPointer<ZStruct> Parser::parseStruct(TokenStream& stream)
         return nullptr;
     }
     s_structName = token.value;
-    parsedTokens.append(ParserToken(token, ParserToken::TypeName, nullptr, s_structName));
+    Tokenizer::Token structName = token;
 
     skipWhitespace(stream, true);
     if (!stream.expectToken(token, Tokenizer::OpenCurly|Tokenizer::Identifier))
@@ -394,6 +406,7 @@ QSharedPointer<ZStruct> Parser::parseStruct(TokenStream& stream)
         parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
 
         QSharedPointer<ZStruct> struc = QSharedPointer<ZStruct>(new ZStruct(nullptr));
+        parsedTokens.append(ParserToken(structName, ParserToken::TypeName, struc, parentsPrefix+s_structName));
         struc->flags = s_flags;
         struc->identifier = s_structName;
         struc->tokens = classTokens;
@@ -417,10 +430,19 @@ QSharedPointer<ZStruct> Parser::parseStruct(TokenStream& stream)
     }
 }
 
-QSharedPointer<ZEnum> Parser::parseEnum(TokenStream& stream)
+QSharedPointer<ZEnum> Parser::parseEnum(TokenStream& stream, QSharedPointer<ZStruct> parent)
 {
     QString e_enumName;
     QList< QPair<QString, QSharedPointer<ZExpression>> > e_values;
+
+    QString parentsPrefix = "";
+    QSharedPointer<ZTreeNode> p = parent;
+    while (p)
+    {
+        if (p->type() == ZTreeNode::Class || p->type() == ZTreeNode::Struct)
+            parentsPrefix = p->identifier + "." + parentsPrefix;
+        p = p->parent;
+    }
 
     // enum <name>
     // {
@@ -438,7 +460,7 @@ QSharedPointer<ZEnum> Parser::parseEnum(TokenStream& stream)
         return nullptr;
     }
     e_enumName = token.value;
-    parsedTokens.append(ParserToken(token, ParserToken::TypeName, nullptr, e_enumName));
+    Tokenizer::Token enumName = token;
 
     skipWhitespace(stream, true);
     if (!stream.expectToken(token, Tokenizer::OpenCurly))
@@ -509,6 +531,7 @@ QSharedPointer<ZEnum> Parser::parseEnum(TokenStream& stream)
     else parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
 
     QSharedPointer<ZEnum> enm = QSharedPointer<ZEnum>(new ZEnum(nullptr));
+    parsedTokens.append(ParserToken(enumName, ParserToken::TypeName, enm, parentsPrefix+e_enumName));
     enm->identifier = e_enumName;
     enm->values = e_values;
     // this is so that destructor works correctly
