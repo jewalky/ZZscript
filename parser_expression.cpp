@@ -13,6 +13,7 @@ ZExpression::~ZExpression()
     }
 
     leaves.clear();
+    resultType.destroy();
 }
 
 static QString typeFromLeaf(ZExpressionLeaf& leaf)
@@ -1541,12 +1542,28 @@ void Parser::dumpExpression(ZExpression* expr, int level)
     }
 }
 
+//
+static QString getFullFieldName(ZTreeNode* node)
+{
+    QString parents = node->identifier;
+    ZTreeNode* p = node->parent;
+    while (p)
+    {
+        if (p->type() == ZTreeNode::Class || p->type() == ZTreeNode::Struct)
+            parents = p->identifier + "." + parents;
+        p = p->parent;
+    }
+    return parents;
+}
+
 void Parser::highlightExpression(ZExpression* expr, ZTreeNode* parent, ZStruct* context)
 {
     for (Tokenizer::Token& tok : expr->operatorTokens)
         parsedTokens.append(ParserToken(tok, ParserToken::Operator));
     for (Tokenizer::Token& tok : expr->specialTokens)
         parsedTokens.append(ParserToken(tok, ParserToken::SpecialToken));
+
+    // here we also set expression type :)
 
     // produces smart syntax highlighting based on various contexts:
     // parent = block that contains this expression
@@ -1567,6 +1584,9 @@ void Parser::highlightExpression(ZExpression* expr, ZTreeNode* parent, ZStruct* 
                     Tokenizer::Token& tok = leafExpr->leaves[0].token;
                     ZTreeNode* resolved = resolveType(tok.value, context);
                     parsedTokens.append(ParserToken(tok, ParserToken::TypeName, resolved, tok.value));
+                    // set type of this expression to resolved type
+                    expr->resultType.type = tok.value;
+                    expr->resultType.reference = resolved;
                 }
                 else
                 {
@@ -1577,6 +1597,193 @@ void Parser::highlightExpression(ZExpression* expr, ZTreeNode* parent, ZStruct* 
             parsedTokens.append(ParserToken(expr->leaves[0].token, ParserToken::Keyword));
             return;
         }
+    }
+    else if (expr->op == ZExpression::Member)
+    {
+        // resolve symbol
+        // in a Member, all leaves are identifiers
+        ZTreeNode* lastcls = nullptr;
+        ZTreeNode* lastfound = nullptr;
+        bool fullfound = true;
+        bool isstatic = false;
+        for (int i = 0; i < expr->leaves.size(); i++)
+        {
+            ZExpressionLeaf& leaf = expr->leaves[i];
+            if (i == 0) // first identifier in member expression is a local (or field or whatever)
+            {
+                // if it's not an identifier, resolve expression...
+                if (leaf.type == ZExpressionLeaf::Expression)
+                {
+                    highlightExpression(leaf.expr, parent, context);
+                    lastcls = leaf.expr->resultType.reference;
+                    lastfound = nullptr;
+                    continue;
+                }
+                QString firstSymbol = leaf.token.value;
+                ZTreeNode* resolved = resolveSymbol(firstSymbol, parent, context);
+                if (resolved)
+                {
+                    ParserToken::TokenType t = ParserToken::Local;
+                    switch (resolved->type())
+                    {
+                    case ZTreeNode::LocalVariable:
+                        t = (resolved->parent && resolved->parent->type() == ZTreeNode::Method) ? ParserToken::Argument : ParserToken::Local;
+                        break;
+                    case ZTreeNode::Field:
+                        t = ParserToken::Field;
+                        break;
+                    case ZTreeNode::Method:
+                        t = ParserToken::Method;
+                        break;
+                    default:
+                        break;
+                    }
+                    parsedTokens.append(ParserToken(leaf.token, t, resolved, leaf.token.value));
+                    ZCompoundType ft;
+                    if (resolved->type() == ZTreeNode::Method)
+                    {
+                        ZMethod* method = reinterpret_cast<ZMethod*>(resolved);
+                        ft = method->returnTypes[0];
+                    }
+                    else if (resolved->type() == ZTreeNode::Field)
+                    {
+                        ZField* field = reinterpret_cast<ZField*>(resolved);
+                        ft = field->fieldType;
+                    }
+                    else if (resolved->type() == ZTreeNode::LocalVariable)
+                    {
+                        ZLocalVariable* local = reinterpret_cast<ZLocalVariable*>(resolved);
+                        if (!local->hasType && local->children.size() && local->children[0]->type() == ZTreeNode::Expression)
+                        {
+                            ZExpression* localExpr = reinterpret_cast<ZExpression*>(local->children[0]);
+                            ft = localExpr->resultType;
+                        }
+                        else
+                        {
+                            ft = local->varType;
+                        }
+                    }
+                    lastcls = ft.reference;
+                    lastfound = resolved;
+                }
+                else
+                {
+                    // check if it's a class
+                    ZTreeNode* typeFound = resolveType(firstSymbol, context);
+                    if (!typeFound)
+                    {
+                        fullfound = false;
+                        break;
+                    }
+                    // found a type: switch mode
+                    isstatic = true;
+                    lastcls = typeFound;
+                    lastfound = nullptr;
+                    // also mark this type as type
+                    parsedTokens.append(ParserToken(leaf.token, ParserToken::TypeName, typeFound, leaf.token.value));
+                }
+            }
+            else if (lastcls)
+            {
+                // find field/method
+                for (ZTreeNode* node : lastcls->children)
+                {
+                    if ((node->type() == ZTreeNode::Method || node->type() == ZTreeNode::Field || node->type() == ZTreeNode::Constant || node->type() == ZTreeNode::Struct) &&
+                            !node->identifier.compare(leaf.token.value, Qt::CaseInsensitive))
+                    {
+                        // check if static
+                        bool fisstatic = false;
+                        if (node->type() == ZTreeNode::Field)
+                        {
+                            ZField* field = reinterpret_cast<ZField*>(node);
+                            fisstatic = field->flags.contains("static");
+                        }
+                        else if (node->type() == ZTreeNode::Method)
+                        {
+                            ZMethod* method = reinterpret_cast<ZMethod*>(node);
+                            fisstatic = method->flags.contains("static");
+                        }
+                        else if (node->type() == ZTreeNode::Constant)
+                        {
+                            fisstatic = true; // but with this we cannot have typed constants
+                        }
+                        // matched
+                        // mark this field
+                        ParserToken::TokenType t = ParserToken::Field;
+                        if (node->type() == ZTreeNode::Method)
+                            t = ParserToken::Method;
+                        else if (node->type() == ZTreeNode::Constant)
+                            t = ParserToken::ConstantName;
+                        else if (node->type() == ZTreeNode::Struct)
+                            t = ParserToken::TypeName;
+                        parsedTokens.append(ParserToken(leaf.token, t, node, getFullFieldName(node)));
+                        // find type of this field
+                        // if it's a constant, there can be no type...
+                        if (node->type() == ZTreeNode::Constant)
+                        {
+                            lastcls = nullptr;
+                            // todo mark as constant
+                            continue;
+                        }
+                        // if it's a struct, use type directly. I'm not sure it works correctly
+                        if (isstatic && node->type() == ZTreeNode::Struct)
+                        {
+                            lastcls = node;
+                            parsedTokens.append(ParserToken(leaf.token, ParserToken::TypeName, node, leaf.token.value));
+                            continue;
+                        }
+                        // if it's a field, we have field type.
+                        ZCompoundType ft;
+                        if (node->type() == ZTreeNode::Method)
+                        {
+                            ZMethod* method = reinterpret_cast<ZMethod*>(node);
+                            ft = method->returnTypes[0];
+                            // todo mark as method access
+                        }
+                        else if (node->type() == ZTreeNode::Field)
+                        {
+                            ZField* field = reinterpret_cast<ZField*>(node);
+                            ft = field->fieldType;
+                            // todo mark as field access
+                        }
+                        if (fisstatic != isstatic) // if we need static and it's not static, then we cannot really use this
+                        {
+                            fullfound = false;
+                            break;
+                        }
+                        lastcls = ft.reference;
+                        lastfound = node;
+                    }
+                }
+            }
+            else
+            {
+                fullfound = false;
+                break; // todo make a warning about unresolved identifier along the chain
+            }
+        }
+
+        if (fullfound && lastfound)
+        {
+            // type of this expression will be either type of last field, or type of method return value
+            if (lastfound->type() == ZTreeNode::Field)
+            {
+                ZField* field = reinterpret_cast<ZField*>(lastfound);
+                expr->resultType = field->fieldType;
+            }
+            else if (lastfound->type() == ZTreeNode::Method)
+            {
+                ZMethod* method = reinterpret_cast<ZMethod*>(lastfound);
+                expr->resultType = method->returnTypes[0];
+            }
+            else if (lastfound->type() == ZTreeNode::Constant)
+            {
+                // todo: detect constant type. this is not available yet.
+                // this is the same as literal type
+            }
+        }
+
+        return;
     }
 
     static QList<QString> keywords = QList<QString>() << "true" << "false" << "null";
@@ -1589,9 +1796,31 @@ void Parser::highlightExpression(ZExpression* expr, ZTreeNode* parent, ZStruct* 
             parsedTokens.append(ParserToken(leaf.token, ParserToken::Keyword));
             break;
         case ZExpressionLeaf::Identifier:
+        {
             if (keywords.contains(leaf.token.value.toLower()))
                 parsedTokens.append(ParserToken(leaf.token, ParserToken::Keyword));
+            ZTreeNode* resolved = resolveSymbol(leaf.token.value, parent, context);
+            if (resolved)
+            {
+                ParserToken::TokenType t = ParserToken::Local;
+                switch (resolved->type())
+                {
+                case ZTreeNode::LocalVariable:
+                    t = (resolved->parent && resolved->parent->type() == ZTreeNode::Method) ? ParserToken::Argument : ParserToken::Local;
+                    break;
+                case ZTreeNode::Field:
+                    t = ParserToken::Field;
+                    break;
+                case ZTreeNode::Method:
+                    t = ParserToken::Method;
+                    break;
+                default:
+                    break;
+                }
+                parsedTokens.append(ParserToken(leaf.token, t, resolved, leaf.token.value));
+            }
             break;
+        }
         case ZExpressionLeaf::Expression:
             highlightExpression(leaf.expr, parent, context);
             break;
@@ -1604,6 +1833,26 @@ void Parser::highlightExpression(ZExpression* expr, ZTreeNode* parent, ZStruct* 
             break;
         default:
             break;
+        }
+    }
+
+    // call expression has the type of whatever is being called
+    if (expr->op == ZExpression::Call && expr->leaves.size())
+    {
+        // normally either identifier or expression
+        ZExpressionLeaf& leaf = expr->leaves[0];
+        if (leaf.type == ZExpressionLeaf::Expression)
+        {
+            expr->resultType = leaf.expr->resultType;
+        }
+        else if (leaf.type == ZExpressionLeaf::Identifier)
+        {
+            ZTreeNode* resolved = resolveSymbol(leaf.token.value, parent, context);
+            if (resolved && resolved->type() == ZTreeNode::Method)
+            {
+                ZMethod* method = reinterpret_cast<ZMethod*>(resolved);
+                expr->resultType = method->returnTypes[0];
+            }
         }
     }
 }

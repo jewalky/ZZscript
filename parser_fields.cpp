@@ -352,7 +352,7 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
             // method name
             parsedTokens.append(ParserToken(fieldNameToken, ParserToken::Method));
             //
-            QList<ZMethod::Argument> args;
+            QList<ZLocalVariable*> args;
             QList<Tokenizer::Token> body;
             bool hadellipsis = false;
             while (true)
@@ -361,7 +361,7 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
                 if (!stream.expectToken(token, Tokenizer::CloseParen|Tokenizer::Ellipsis|Tokenizer::Identifier))
                 {
                     for (ZCompoundType& t : fieldTypes) t.destroy();
-                    for (auto& arg : args) if (arg.defaultValue) delete arg.defaultValue;
+                    for (auto& arg : args) delete arg;
                     qDebug("parseObjectFields: unexpected %s, closing parenthesis, ellipsis or argument at line %d", token.toCString(), token.line);
                     return false;
                 }
@@ -394,7 +394,7 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
                 if (!parseCompoundType(stream, arg_type, struc))
                 {
                     for (ZCompoundType& t : fieldTypes) t.destroy();
-                    for (auto& arg : args) if (arg.defaultValue) delete arg.defaultValue;
+                    for (auto& arg : args) delete arg;
                     qDebug("parseObjectFields: expected valid argument type at line %d", token.line);
                     return false;
                 }
@@ -403,7 +403,7 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
                 if (!stream.expectToken(token, Tokenizer::Identifier))
                 {
                     for (ZCompoundType& t : fieldTypes) t.destroy();
-                    for (auto& arg : args) if (arg.defaultValue) delete arg.defaultValue;
+                    for (auto& arg : args) delete arg;
                     qDebug("parseObjectFields: unexpected %s, expected argument name at line %d", token.toCString(), token.line);
                     return false;
                 }
@@ -416,7 +416,7 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
                 if (!stream.expectToken(token, Tokenizer::CloseParen|Tokenizer::OpAssign|Tokenizer::Comma))
                 {
                     for (ZCompoundType& t : fieldTypes) t.destroy();
-                    for (auto& arg : args) if (arg.defaultValue) delete arg.defaultValue;
+                    for (auto& arg : args) delete arg;
                     qDebug("parseObjectFields: unexpected %s, expected closing parenthesis or default value at line %d", token.toCString(), token.line);
                     return false;
                 }
@@ -431,7 +431,7 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
                     if (!dexpr)
                     {
                         for (ZCompoundType& t : fieldTypes) t.destroy();
-                        for (auto& arg : args) if (arg.defaultValue) delete arg.defaultValue;
+                        for (auto& arg : args) delete arg;
                         qDebug("parseObjectFields: expected valid default value expression for '%s' at line %d", arg_name.toUtf8().data(), token.line);
                         return false;
                     }
@@ -441,17 +441,26 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
                     if (!stream.expectToken(token, Tokenizer::CloseParen|Tokenizer::Comma))
                     {
                         for (ZCompoundType& t : fieldTypes) t.destroy();
-                        for (auto& arg : args) if (arg.defaultValue) delete arg.defaultValue;
+                        for (auto& arg : args) delete arg;
                         if (dexpr) delete dexpr;
                         qDebug("parseObjectFields: unexpected %s, expected closing parenthesis or comma at line %d", token.toCString(), token.line);
                         return false;
                     }
                 }
 
-                ZMethod::Argument arg;
-                arg.name = arg_name;
-                arg.defaultValue = dexpr;
-                arg.type = arg_type;
+                ZLocalVariable* arg = new ZLocalVariable(nullptr);
+                arg->identifier = arg_name;
+                if (dexpr)
+                {
+                    dexpr->parent = arg;
+                    arg->children.append(dexpr);
+                }
+                arg->hasType = true;
+                arg->varType = arg_type;
+                if (arg_isOut)
+                    arg->flags.append("out");
+                if (arg_isRef)
+                    arg->flags.append("ref");
                 args.append(arg);
 
                 if (token.type == Tokenizer::CloseParen)
@@ -466,7 +475,7 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
             if (!stream.expectToken(token, Tokenizer::Identifier|Tokenizer::OpenCurly|Tokenizer::Semicolon))
             {
                 for (ZCompoundType& t : fieldTypes) t.destroy();
-                for (auto& arg : args) if (arg.defaultValue) delete arg.defaultValue;
+                for (auto& arg : args) delete arg;
                 qDebug("parseObjectFields: unexpected %s, expected 'const', semicolon or method body at line %d", token.toCString(), token.line);
                 return false;
             }
@@ -481,7 +490,7 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
                 else
                 {
                     for (ZCompoundType& t : fieldTypes) t.destroy();
-                    for (auto& arg : args) if (arg.defaultValue) delete arg.defaultValue;
+                    for (auto& arg : args) delete arg;
                     qDebug("parseObjectFields: invalid method flag %s, expected 'const' at line %d", token.toCString(), token.line);
                     return false;
                 }
@@ -490,7 +499,7 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
                 if (!stream.expectToken(token, Tokenizer::OpenCurly|Tokenizer::Semicolon))
                 {
                     for (ZCompoundType& t : fieldTypes) t.destroy();
-                    for (auto& arg : args) if (arg.defaultValue) delete arg.defaultValue;
+                    for (auto& arg : args) delete arg;
                     qDebug("parseObjectFields: unexpected %s, expected semicolon or method body at line %d", token.toCString(), token.line);
                     return false;
                 }
@@ -510,14 +519,14 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
                 if (!consumeTokens(stream, body, Tokenizer::CloseCurly) || !stream.peekToken(token) || token.type != Tokenizer::CloseCurly)
                 {
                     for (ZCompoundType& t : fieldTypes) t.destroy();
-                    for (auto& arg : args) if (arg.defaultValue) delete arg.defaultValue;
+                    for (auto& arg : args) delete arg;
                     qDebug("parseObjectFields: unexpected end of input for method body (method %s)", f_name.toUtf8().data());
                     return false;
                 }
                 if (!stream.expectToken(token, Tokenizer::CloseCurly))
                 {
                     for (ZCompoundType& t : fieldTypes) t.destroy();
-                    for (auto& arg : args) if (arg.defaultValue) delete arg.defaultValue;
+                    for (auto& arg : args) delete arg;
                     qDebug("parseObjectFields: unexpected %s, expected closing curly brace at line %d", token.toCString(), token.line);
                     return false;
                 }
@@ -540,13 +549,7 @@ bool Parser::parseObjectFields(ZClass* cls, ZStruct* struc)
             method->isValid = true;
             // for destructor to work
             for (auto& arg : args)
-            {
-                if (arg.defaultValue)
-                {
-                    arg.defaultValue->parent = method;
-                    method->children.append(arg.defaultValue);
-                }
-            }
+                arg->parent = method;
             struc->children.append(method);
         }
     }
@@ -577,8 +580,7 @@ bool Parser::parseCompoundType(TokenStream& stream, ZCompoundType& type, ZStruct
     if (systemType)
     {
         type.type = token.value.toLower();
-        type.systemType = systemType;
-        type.reference = nullptr;
+        type.reference = systemType;
 
         parsedTokens.append(ParserToken(token, ParserToken::TypeName, systemType, token.value));
     }
@@ -626,9 +628,8 @@ bool Parser::parseCompoundType(TokenStream& stream, ZCompoundType& type, ZStruct
             }
         }
 
-        type.type = token.value.toLower();
+        type.type = fullType;
         type.reference = lastType;
-        type.systemType = nullptr;
     }
 
     int cpos = stream.position();

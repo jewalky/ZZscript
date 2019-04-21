@@ -33,7 +33,7 @@ ZCodeBlock* Parser::parseCodeBlock(TokenStream& stream, ZTreeNode* parent, ZStru
 
         // check if there are cycles along the parent chain
         ZTreeNode* p = parent;
-        while (p)
+        while (p && p->type() != ZTreeNode::Class && p->type() != ZTreeNode::Struct)
         {
             if (p->type() == ZTreeNode::ForCycle || p->type() == ZTreeNode::WhileCycle)
             {
@@ -183,7 +183,6 @@ ZForCycle* Parser::parseForCycle(TokenStream& stream, ZTreeNode* parent, ZStruct
 
 QList<ZTreeNode*> Parser::parseStatement(TokenStream& stream, ZTreeNode* parent, ZStruct* context, quint64 flags, quint64 stopAtAnyOf)
 {
-    ZTreeNode* node;
     skipWhitespace(stream, true);
     Tokenizer::Token token;
     QList<ZTreeNode*> nodes;
@@ -243,8 +242,9 @@ QList<ZTreeNode*> Parser::parseStatement(TokenStream& stream, ZTreeNode* parent,
                 var->lineNumber = identifierToken.line;
                 expr->parent = var;
                 var->children.append(expr);
+                var->identifier = identifierToken.value;
                 nodes.append(var);
-                parsedTokens.append(ParserToken(identifierToken, ParserToken::Local, var));
+                parsedTokens.append(ParserToken(identifierToken, ParserToken::Local, var, identifierToken.value));
 
                 skipWhitespace(stream, true);
                 if (!stream.expectToken(token, Tokenizer::Comma|stopAtAnyOf))
@@ -468,6 +468,7 @@ QList<ZTreeNode*> Parser::parseStatement(TokenStream& stream, ZTreeNode* parent,
                         var->flags.append("const");
                     var->hasType = true;
                     var->varType = ftype;
+                    var->identifier = identifierToken.value;
                     types.append(ftype);
                     var->lineNumber = identifierToken.line;
                     if (expr)
@@ -476,7 +477,7 @@ QList<ZTreeNode*> Parser::parseStatement(TokenStream& stream, ZTreeNode* parent,
                         var->children.append(expr);
                     }
                     nodes.append(var);
-                    parsedTokens.append(ParserToken(identifierToken, ParserToken::Local, var));
+                    parsedTokens.append(ParserToken(identifierToken, ParserToken::Local, var, identifierToken.value));
 
                     skipWhitespace(stream, true);
                     if (!stream.expectToken(token, Tokenizer::Comma|Tokenizer::Semicolon))

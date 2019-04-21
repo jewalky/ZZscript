@@ -226,6 +226,12 @@ void DocumentEditor::onTextChanged()
                     break;
                 }
 
+                case ParserToken::Local:
+                {
+                    format.setFontItalic(true);
+                    break;
+                }
+
                 default:
                     break;
             }
@@ -314,4 +320,50 @@ QString DocumentEditor::makeTokenTooltip(ParserToken* tok)
             return "<b>Unresolved type</b> <i>" + tok->referencePath + "</i>";
         }
     }
+    else if (tok->type == ParserToken::Local)
+    {
+        if (tok->reference)
+        {
+            QString typelocal = "<b>Local</b>";
+            ZLocalVariable* local = reinterpret_cast<ZLocalVariable*>(tok->reference);
+            QString addauto = local->hasType ? "" : "auto ";
+            QString typeclass = " (unresolved "+addauto+"type) ";
+            if (local->parent && local->parent->type() == ZTreeNode::Method)
+                typelocal = "<b>Argument</b>";
+            // get type of variable if present
+            ZCompoundType vtype = local->varType;
+            if (!local->hasType && local->children.size() && local->children[0]->type() == ZTreeNode::Expression)
+            {
+                ZExpression* localExpr = reinterpret_cast<ZExpression*>(local->children[0]);
+                vtype = localExpr->resultType;
+            }
+            if (vtype.reference)
+            {
+                switch (vtype.reference->type())
+                {
+                case ZTreeNode::Class:
+                    typeclass = " "+addauto+"class ";
+                    break;
+                case ZTreeNode::Struct:
+                    typeclass = " "+addauto+"struct ";
+                    break;
+                case ZTreeNode::Enum:
+                    typeclass = " "+addauto+"enum ";
+                    break;
+                case ZTreeNode::SystemType:
+                    typeclass = " "+addauto+"";
+                    break;
+                default:
+                    break;
+                }
+            }
+            return typelocal + typeclass + vtype.type + " <i>" + tok->referencePath + "</i>";
+        }
+        else
+        {
+            return "<b>Unresolved local</b> <i>" + tok->referencePath + "</i>";
+        }
+    }
+
+    return "";
 }

@@ -100,14 +100,12 @@ struct ZCompoundType
 {
     QString type;
     ZTreeNode* reference;
-    ZSystemType* systemType;
     QList<ZCompoundType> arguments; // example: Array<Actor>
     QList<ZExpression*> arrayDimensions; // example: string s[8]; or string s[SIZE];
 
     ZCompoundType()
     {
         reference = nullptr;
-        systemType = nullptr;
     }
 
     void destroy()
@@ -121,20 +119,7 @@ struct ZCompoundType
 
     bool isSystem()
     {
-        if (reference)
-            return false;
-        if (systemType)
-            return true;
-        return false;
-    }
-
-    bool isUser()
-    {
-        if (systemType)
-            return false;
-        if (reference)
-            return true;
-        return false;
+        return (reference && reference->type() == ZTreeNode::SystemType);
     }
 };
 
@@ -267,21 +252,12 @@ struct ZMethod : public ZTreeNode
     {
         for (ZCompoundType& rt : returnTypes)
             rt.destroy();
-        for (Argument& arg : arguments)
-            arg.type.destroy();
+        for (ZLocalVariable* arg : arguments)
+            delete arg;
     }
 
-    struct Argument
-    {
-        QString name;
-        ZExpression* defaultValue;
-        ZCompoundType type;
-        bool isOut;
-        bool isRef;
-    };
-
     QList<ZCompoundType> returnTypes;
-    QList<Argument> arguments;
+    QList<ZLocalVariable*> arguments;
     QList<QString> flags;
     QString version;
     QString deprecated;
@@ -450,6 +426,8 @@ struct ZExpression : public ZTreeNode
     QList<Tokenizer::Token> specialTokens;
     QList<ZExpressionLeaf> leaves;
 
+    ZCompoundType resultType;
+
     bool evaluate(ZExpressionLeaf& out, QString& type);
     bool evaluateLeaf(ZExpressionLeaf& in, ZExpressionLeaf& out, QString& type);
 };
@@ -591,6 +569,7 @@ private:
 
     // helper
     ZTreeNode* resolveType(QString name, ZStruct* context = nullptr, bool onlycontext = false);
+    ZTreeNode* resolveSymbol(QString name, ZTreeNode* parent, ZStruct* context);
 };
 
 #endif // PARSER_H

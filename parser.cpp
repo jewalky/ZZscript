@@ -280,11 +280,13 @@ ZTreeNode* Parser::resolveType(QString name, ZStruct* context, bool onlycontext)
     QList<QString> nameParts = name.split(".");
     if (context)
     {
+        if (!onlycontext && !context->identifier.compare(name, Qt::CaseInsensitive))
+            return context;
         // search for local type name
         for (ZTreeNode* node : context->children)
         {
             if ((node->type() == ZTreeNode::Struct || node->type() == ZTreeNode::Class || node->type() == ZTreeNode::Enum)
-                    && node->identifier.toLower() == nameParts[0].toLower())
+                    && !node->identifier.compare(nameParts[0], Qt::CaseInsensitive))
             {
                 //qDebug("return item %s from context %s", node->identifier.toUtf8().data(), context->identifier.toUtf8().data());
                 return node;
@@ -298,7 +300,7 @@ ZTreeNode* Parser::resolveType(QString name, ZStruct* context, bool onlycontext)
     for (ZTreeNode* node : types)
     {
         if ((node->type() == ZTreeNode::Struct || node->type() == ZTreeNode::Class || node->type() == ZTreeNode::Enum)
-                && node->identifier.toLower() == nameParts[0].toLower())
+                && !node->identifier.compare(nameParts[0], Qt::CaseInsensitive))
         {
             if (nameParts.size() == 1)
                 return node; // type found
@@ -317,6 +319,59 @@ ZSystemType* Parser::resolveSystemType(QString name)
         if (!t.identifier.compare(name, Qt::CaseInsensitive))
             return &t;
     }
+
+    return nullptr;
+}
+
+ZTreeNode* Parser::resolveSymbol(QString name, ZTreeNode* parent, ZStruct* context)
+{
+    // first, look in all parent scopes
+    ZTreeNode* p = parent;
+    while (p)
+    {
+        if (p->type() == ZTreeNode::ForCycle) // for cycle also has initializer.
+        {
+            // check if it's a variable in the initializer
+            ZForCycle* forCycle = reinterpret_cast<ZForCycle*>(p);
+            for (ZTreeNode* node : forCycle->initializers)
+            {
+                if (node->type() == ZTreeNode::LocalVariable && !node->identifier.compare(name, Qt::CaseInsensitive))
+                    return node; // found local variable from For initializer
+            }
+        }
+        else if (p->type() == ZTreeNode::Method) // method also has arguments.
+        {
+            ZMethod* method = reinterpret_cast<ZMethod*>(p);
+            for (ZLocalVariable* var : method->arguments)
+            {
+                if (!var->identifier.compare(name, Qt::CaseInsensitive))
+                    return var;
+            }
+        }
+
+        // look for local variable definition in the block
+        for (ZTreeNode* node : p->children)
+        {
+            if (node->type() == ZTreeNode::LocalVariable && !node->identifier.compare(name, Qt::CaseInsensitive))
+                return node; // found local variable in block
+        }
+
+        p = p->parent;
+    }
+
+    // check context fields
+    if (context)
+    {
+        for (ZTreeNode* node : context->children)
+        {
+            if ((node->type() == ZTreeNode::Field ||
+                 node->type() == ZTreeNode::Method ||
+                 node->type() == ZTreeNode::Constant) && !node->identifier.compare(name, Qt::CaseInsensitive))
+                return node;
+        }
+    }
+
+    // todo check global constants, but not yet
 
     return nullptr;
 }
