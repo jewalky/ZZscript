@@ -588,7 +588,14 @@ bool Parser::parseCompoundType(TokenStream& stream, ZCompoundType& type, QShared
         if (lastType && (!lastType->parent || lastType->parent->type() == ZTreeNode::FileRoot))
             prependContext = "";
 
-        parsedTokens.append(ParserToken(token, ParserToken::TypeName, lastType, prependContext+token.value));
+        if (!lastType)
+        {
+            parsedTokens.append(ParserToken(token, ParserToken::TypeName, lastType, prependContext+token.value));
+        }
+        else
+        {
+            parsedTokens.append(ParserToken(token, ParserToken::TypeName, lastType, getFullType(lastType)));
+        }
 
         // check for multi-component type (i.e. A.B.C)
         QString fullType = token.value;
@@ -611,8 +618,12 @@ bool Parser::parseCompoundType(TokenStream& stream, ZCompoundType& type, QShared
                 if (!lastType)
                 {
                     qDebug("parseCompoundType: warning: unresolved type %s", fullType.toUtf8().data());
+                    parsedTokens.append(ParserToken(token, ParserToken::TypeName, lastType, prependContext+fullType));
                 }
-                parsedTokens.append(ParserToken(token, ParserToken::TypeName, lastType, prependContext+fullType));
+                else
+                {
+                    parsedTokens.append(ParserToken(token, ParserToken::TypeName, lastType, getFullType(lastType)));
+                }
             }
             else
             {
@@ -621,8 +632,16 @@ bool Parser::parseCompoundType(TokenStream& stream, ZCompoundType& type, QShared
             }
         }
 
-        type.type = fullType;
-        type.reference = lastType;
+        if (!lastType)
+        {
+            type.type = fullType;
+            type.reference = lastType;
+        }
+        else
+        {
+            type.type = getFullType(lastType);
+            type.reference = lastType;
+        }
     }
 
     int cpos = stream.position();

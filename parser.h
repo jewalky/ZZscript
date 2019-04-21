@@ -570,6 +570,7 @@ public:
 
     //
     static QSharedPointer<ZSystemType> resolveSystemType(QString name);
+    static QString getFullType(QSharedPointer<ZTreeNode> type);
 
     QList<QSharedPointer<ZTreeNode>> getOwnTypeInformation();
     QList<QSharedPointer<ZTreeNode>> getTypeInformation();

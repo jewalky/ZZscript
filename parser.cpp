@@ -242,15 +242,27 @@ QSharedPointer<ZTreeNode> Parser::resolveType(QString name, QSharedPointer<ZStru
     {
         if (!onlycontext && !context->identifier.compare(name, Qt::CaseInsensitive))
             return context;
-        // search for local type name
-        for (QSharedPointer<ZTreeNode> node : context->children)
+        while (context)
         {
-            if ((node->type() == ZTreeNode::Struct || node->type() == ZTreeNode::Class || node->type() == ZTreeNode::Enum)
-                    && !node->identifier.compare(nameParts[0], Qt::CaseInsensitive))
+            // search for local type name
+            for (QSharedPointer<ZTreeNode> node : context->children)
             {
-                //qDebug("return item %s from context %s", node->identifier.toUtf8().data(), context->identifier.toUtf8().data());
-                return node;
+                if ((node->type() == ZTreeNode::Struct || node->type() == ZTreeNode::Class || node->type() == ZTreeNode::Enum)
+                        && !node->identifier.compare(nameParts[0], Qt::CaseInsensitive))
+                {
+                    //qDebug("return item %s from context %s", node->identifier.toUtf8().data(), context->identifier.toUtf8().data());
+                    return node;
+                }
             }
+            // if context is a class, it has parent
+            if (context->type() == ZTreeNode::Class)
+            {
+                QSharedPointer<ZClass> cls = context.dynamicCast<ZClass>();
+                if (!cls->parentReference)
+                    break;
+                context = cls->parentReference;
+            }
+            else break;
         }
     }
 
@@ -288,6 +300,16 @@ QSharedPointer<ZTreeNode> Parser::resolveSymbol(QString name, QSharedPointer<ZTr
     if (name == "self")
     {
         if (context) return context->self;
+        return nullptr; // invalid
+    }
+    else if (name == "super")
+    {
+        if (context && context->type() == ZTreeNode::Class)
+        {
+            QSharedPointer<ZClass> cls = context.dynamicCast<ZClass>();
+            if (cls->parentReference)
+                return cls->parentReference->self;
+        }
         return nullptr; // invalid
     }
 
@@ -328,12 +350,24 @@ QSharedPointer<ZTreeNode> Parser::resolveSymbol(QString name, QSharedPointer<ZTr
     // check context fields
     if (context)
     {
-        for (QSharedPointer<ZTreeNode> node : context->children)
+        while (context)
         {
-            if ((node->type() == ZTreeNode::Field ||
-                 node->type() == ZTreeNode::Method ||
-                 node->type() == ZTreeNode::Constant) && !node->identifier.compare(name, Qt::CaseInsensitive))
-                return node;
+            for (QSharedPointer<ZTreeNode> node : context->children)
+            {
+                if ((node->type() == ZTreeNode::Field ||
+                     node->type() == ZTreeNode::Method ||
+                     node->type() == ZTreeNode::Constant) && !node->identifier.compare(name, Qt::CaseInsensitive))
+                    return node;
+            }
+            // if context is a class, it has parent
+            if (context->type() == ZTreeNode::Class)
+            {
+                QSharedPointer<ZClass> cls = context.dynamicCast<ZClass>();
+                if (!cls->parentReference)
+                    break;
+                context = cls->parentReference;
+            }
+            else break;
         }
     }
 
@@ -361,4 +395,18 @@ QList<QSharedPointer<ZTreeNode>> Parser::getTypeInformation()
 ZStruct::~ZStruct()
 {
     // not needed anymore?
+}
+
+// looks for all type-y parents
+QString Parser::getFullType(QSharedPointer<ZTreeNode> type)
+{
+    QString ptype = type->identifier;
+    QSharedPointer<ZTreeNode> parent = type->parent;
+    while (parent)
+    {
+        if (parent->type() == ZTreeNode::Class || parent->type() == ZTreeNode::Struct)
+            ptype = parent->identifier + "." + ptype;
+        parent = parent->parent;
+    }
+    return ptype;
 }
