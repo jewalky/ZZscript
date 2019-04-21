@@ -35,12 +35,18 @@ QList<ZSystemType> Parser::systemTypes = QList<ZSystemType>()
 
 Parser::Parser(QList<Tokenizer::Token> tokens) : tokens(tokens)
 {
-
+    //
 }
 
 Parser::~Parser()
 {
     // not needed anymore
+}
+
+ZTreeNode::ZTreeNode(QSharedPointer<ZTreeNode> p)
+{
+    parent = p;
+    isValid = false;
 }
 
 ZTreeNode::~ZTreeNode()
@@ -51,6 +57,7 @@ ZTreeNode::~ZTreeNode()
 bool Parser::parse()
 {
     parsedTokens.clear();
+    types.clear();
 
     // first off, remove all comments
     for (int i = 0; i < tokens.size(); i++)
@@ -307,8 +314,9 @@ QSharedPointer<ZTreeNode> Parser::resolveSymbol(QString name, QSharedPointer<ZTr
         if (context && context->type() == ZTreeNode::Class)
         {
             QSharedPointer<ZClass> cls = context.dynamicCast<ZClass>();
-            if (cls->parentReference)
-                return cls->parentReference->self;
+            QSharedPointer<ZClass> parentReference = cls->parentReference.toStrongRef();
+            if (parentReference)
+                return parentReference->self;
         }
         return nullptr; // invalid
     }

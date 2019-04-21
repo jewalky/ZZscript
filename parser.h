@@ -38,7 +38,7 @@ public:
     bool isValid;
     QString error;
 
-    explicit ZTreeNode(QSharedPointer<ZTreeNode> p) { parent = p; isValid = false; }
+    explicit ZTreeNode(QSharedPointer<ZTreeNode> p);
     virtual ~ZTreeNode();
 
     virtual NodeType type() { return Generic; }
@@ -68,15 +68,11 @@ class ZInclude : public ZTreeNode
     Q_OBJECT
 public:
 
-    ZInclude(QSharedPointer<ZTreeNode> p) : ZTreeNode(p)
-    {
-        reference = nullptr;
-    }
+    ZInclude(QSharedPointer<ZTreeNode> p) : ZTreeNode(p) { }
 
     virtual NodeType type() { return Include; }
 
     QString location;
-    QSharedPointer<ZFileRoot> reference;
 };
 
 class ZExpression;
@@ -131,7 +127,7 @@ public:
 struct ZCompoundType
 {
     QString type;
-    QSharedPointer<ZTreeNode> reference;
+    QWeakPointer<ZTreeNode> reference;
     QList<ZCompoundType> arguments; // example: Array<Actor>
     QList<QSharedPointer<ZExpression>> arrayDimensions; // example: string s[8]; or string s[SIZE];
 
@@ -142,7 +138,7 @@ struct ZCompoundType
 
     bool isSystem()
     {
-        return (reference && reference->type() == ZTreeNode::SystemType);
+        return (reference && reference.toStrongRef()->type() == ZTreeNode::SystemType);
     }
 };
 
@@ -343,13 +339,13 @@ public:
     QString extendName;
     QString replaceName;
 
-    QSharedPointer<ZClass> parentReference;
-    QSharedPointer<ZClass> extendReference;
-    QSharedPointer<ZClass> replaceReference;
+    QWeakPointer<ZClass> parentReference;
+    QWeakPointer<ZClass> extendReference;
+    QWeakPointer<ZClass> replaceReference;
 
-    QList<QSharedPointer<ZClass>> extensions;
-    QList<QSharedPointer<ZClass>> childrenReferences;
-    QList<QSharedPointer<ZClass>> replacedByReferences; // this is used later for checking
+    QList<QWeakPointer<ZClass>> extensions;
+    QList<QWeakPointer<ZClass>> childrenReferences;
+    QList<QWeakPointer<ZClass>> replacedByReferences; // this is used later for checking
 
     // todo: class and actor magic:
     // - flags (actor flags)

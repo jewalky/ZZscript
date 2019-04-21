@@ -92,8 +92,6 @@ void Document::reparse()
     }
 
     parsedTokens = parser->parsedTokens;
-
-    // to-do: if we ctrl+s, it's a good idea to update all other code (that might try to reference the new class)
 }
 
 void Document::save()
@@ -110,7 +108,6 @@ void Document::save()
         // also, later we need to check that only current project (and below) is reloaded.
         // we don't need to reparse gzdoom.pk3 just because some user code was modified.
         //
-        reparse();
         QList<QSharedPointer<ZTreeNode>> allTypes = parser->getTypeInformation();
         QList<Parser*> parsers;
         for (QSharedPointer<ZTreeNode> node : allTypes)
@@ -177,6 +174,8 @@ void Document::syncFromSource(ProjectFile* pf)
 
     if (pf)
     {
+        if (parser && ownparser)
+            delete parser;
         contents = pf->contents;
         parser = pf->parser;
         ownparser = false;
@@ -556,9 +555,10 @@ QString DocumentEditor::makeTokenTooltip(ParserToken* tok)
                 ZExpression* localExpr = reinterpret_cast<ZExpression*>(local->children[0].get());
                 vtype = localExpr->resultType;
             }
-            if (vtype.reference)
+            QSharedPointer<ZTreeNode> vtypeReference = vtype.reference.toStrongRef();
+            if (vtypeReference)
             {
-                switch (vtype.reference->type())
+                switch (vtypeReference->type())
                 {
                 case ZTreeNode::Class:
                     typeclass = " "+addauto+"class ";
