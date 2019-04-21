@@ -33,14 +33,16 @@ SOURCES += \
     parser_expression.cpp \
     parser_root.cpp \
     parser_fields.cpp \
-    parser_methods.cpp
+    parser_methods.cpp \
+    project.cpp
 
 HEADERS += \
         mainwindow.h \
     document.h \
     tokenizer.h \
     tokens.h \
-    parser.h
+    parser.h \
+    project.h
 
 FORMS += \
         mainwindow.ui

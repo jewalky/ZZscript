@@ -3,7 +3,9 @@
 
 #include <QMainWindow>
 #include <QList>
+#include <QTreeWidgetItem>
 #include "document.h"
+#include "project.h"
 
 namespace Ui {
 class MainWindow;
@@ -24,12 +26,24 @@ public:
     Document* getDocumentForTab(DocumentTab* tab);
     void unloadDocument(Document* doc);
 
+    Project* getProject();
+    void loadProject(QString path);
+
+public slots:
+    void projectTreeDoubleClicked(QTreeWidgetItem* item, int column);
+
 private:
     Ui::MainWindow *ui;
     static MainWindow *ptr;
 
     QList<Document*> documents;
+
+    //
     void makeTabForDocument(Document* doc);
+    void reloadTreeFromProject();
+
+    //
+    Project* project;
 };
 
 #endif // MAINWINDOW_H

@@ -3,11 +3,16 @@
 
 #include <QTime>
 #include <QToolTip>
+#include <QTabWidget>
+#include <QFile>
+#include <QFileInfo>
+#include <QBoxLayout>
 
-Document::Document()
+Document::Document(DocumentTab* tab)
 {
     isnew = false;
     parser = nullptr;
+    this->tab = tab;
 }
 
 void Document::parse()
@@ -32,6 +37,53 @@ void Document::parse()
     parsedTokens = parser->parsedTokens;
 }
 
+void Document::setTab(DocumentTab* tab)
+{
+    if (this->tab) return;
+    this->tab = tab;
+}
+
+DocumentTab* Document::getTab()
+{
+    return tab;
+}
+
+void Document::syncFromSource()
+{
+    if (isnew) return;
+    qDebug("path = %s", fullPath.toUtf8().data());
+    QFileInfo fi(fullPath);
+    if (!fi.isFile())
+        return;
+
+    //
+    QFile f(fullPath);
+    if (f.open(QIODevice::ReadOnly|QIODevice::Text))
+    {
+        contents = f.readAll();
+
+        qDebug("loaded");
+        if (tab)
+        {
+            DocumentEditor* editor = tab->getEditor();
+            editor->setPlainText(contents);
+            editor->textChanged();
+            qDebug("updated");
+        }
+
+        f.close();
+        return;
+    }
+
+    // else
+    qDebug("failed to sync with source: %s", fullPath.toUtf8().data());
+}
+
+DocumentEditor* DocumentTab::getEditor()
+{
+    return editor;
+}
+
 DocumentEditor::DocumentEditor(QWidget* parent) : QPlainTextEdit(parent)
 {
     // link various events
@@ -41,7 +93,29 @@ DocumentEditor::DocumentEditor(QWidget* parent) : QPlainTextEdit(parent)
     setUndoRedoEnabled(false);
     setMouseTracking(true);
 
+    //
+    const int tabStop = 4;  // 4 characters
+
+    QFont f(font());
+    f.setFamily("Courier");
+    QFontMetricsF metrics(f);
+    setTabStopDistance(metrics.width(' ')*tabStop);
+    qDebug("single = %f", metrics.width(' '));
+
     processing = false;
+}
+
+DocumentTab::DocumentTab(QWidget* parent, Document* doc) : QWidget(parent)
+{
+    this->doc = doc;
+
+    // create text document
+    editor = new DocumentEditor(this);
+    QLayout* tabLayout = new QBoxLayout(QBoxLayout::TopToBottom);
+    setLayout(tabLayout);
+    tabLayout->addWidget(editor);
+    tabLayout->setMargin(2);
+    editor->textChanged();
 }
 
 void DocumentEditor::onTextChanged()

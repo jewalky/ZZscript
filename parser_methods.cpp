@@ -286,12 +286,13 @@ QList<ZTreeNode*> Parser::parseStatement(TokenStream& stream, ZTreeNode* parent,
             {
                 // check if return without value
                 skipWhitespace(stream, true);
-                if (!stream.expectToken(token, Tokenizer::Semicolon))
+                if (!stream.peekToken(token) || token.type != Tokenizer::Semicolon)
                 {
                     qDebug("parseStatement: expected valid return expression at line %d", token.line);
                     for (ZTreeNode* node : nodes) delete node;
                     return empty;
                 }
+
             }
             else
             {
