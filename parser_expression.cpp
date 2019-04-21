@@ -1575,9 +1575,10 @@ void Parser::highlightExpression(QSharedPointer<ZExpression> expr, QSharedPointe
                 }
                 QString firstSymbol = leaf.token.value;
                 QSharedPointer<ZTreeNode> resolved = resolveSymbol(firstSymbol, parent, context);
+                ParserToken::TokenType t;
                 if (resolved)
                 {
-                    ParserToken::TokenType t = ParserToken::Local;
+                    t = ParserToken::Local;
                     switch (resolved->type())
                     {
                     case ZTreeNode::LocalVariable:
@@ -1593,8 +1594,12 @@ void Parser::highlightExpression(QSharedPointer<ZExpression> expr, QSharedPointe
                         t = ParserToken::Method;
                         break;
                     default:
+                        resolved = nullptr;
                         break;
                     }
+                }
+                if (resolved)
+                {
                     parsedTokens.append(ParserToken(leaf.token, t, resolved, leaf.token.value));
                     ZCompoundType ft;
                     if (resolved->type() == ZTreeNode::Method)
@@ -1762,6 +1767,9 @@ void Parser::highlightExpression(QSharedPointer<ZExpression> expr, QSharedPointe
                 ParserToken::TokenType t = ParserToken::Local;
                 switch (resolved->type())
                 {
+                case ZTreeNode::Constant:
+                    t = ParserToken::ConstantName;
+                    break;
                 case ZTreeNode::LocalVariable:
                     t = (resolved->parent && resolved->parent->type() == ZTreeNode::Method) ? ParserToken::Argument : ParserToken::Local;
                     break;

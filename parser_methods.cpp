@@ -568,7 +568,15 @@ QSharedPointer<ZCodeBlock> Parser::parseCodeBlockOrLine(TokenStream& stream, QSh
 
 bool Parser::parseEnumExpressions(QSharedPointer<ZEnum> enm, QSharedPointer<ZStruct> context)
 {
-    for (QPair<QString, QSharedPointer<ZExpression>> p : enm->values)
-        highlightExpression(p.second, nullptr, context);
+    for (QSharedPointer<ZTreeNode> node : enm->children)
+    {
+        if (node->type() != ZTreeNode::Constant)
+            continue;
+        QSharedPointer<ZConstant> konst = node.dynamicCast<ZConstant>();
+        if (!konst->children.size())
+            continue;
+        QSharedPointer<ZExpression> expr = konst->children[0].dynamicCast<ZExpression>();
+        highlightExpression(expr, enm, context);
+    }
     return true;
 }

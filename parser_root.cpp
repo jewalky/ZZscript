@@ -433,7 +433,7 @@ QSharedPointer<ZStruct> Parser::parseStruct(TokenStream& stream, QSharedPointer<
 QSharedPointer<ZEnum> Parser::parseEnum(TokenStream& stream, QSharedPointer<ZStruct> parent)
 {
     QString e_enumName;
-    QList< QPair<QString, QSharedPointer<ZExpression>> > e_values;
+    QList<QSharedPointer<ZConstant>> e_values;
 
     QString parentsPrefix = "";
     QSharedPointer<ZTreeNode> p = parent;
@@ -483,6 +483,7 @@ QSharedPointer<ZEnum> Parser::parseEnum(TokenStream& stream, QSharedPointer<ZStr
         if (token.type == Tokenizer::CloseCurly)
             break;
 
+        int lineNo = token.line;
         QString enum_id = token.value;
         parsedTokens.append(ParserToken(token, ParserToken::ConstantName));
         skipWhitespace(stream, true);
@@ -506,7 +507,16 @@ QSharedPointer<ZEnum> Parser::parseEnum(TokenStream& stream, QSharedPointer<ZStr
                 return nullptr;
             }
 
-            e_values.append(QPair<QString, QSharedPointer<ZExpression>>(enum_id, expr));
+            QSharedPointer<ZConstant> konst = QSharedPointer<ZConstant>(new ZConstant(nullptr));
+            konst->identifier = enum_id;
+            // put expression into const, if any
+            if (expr)
+            {
+                expr->parent = konst;
+                konst->children.append(expr);
+            }
+            konst->lineNumber = lineNo;
+            e_values.append(konst);
 
             skipWhitespace(stream, true);
             if (!stream.expectToken(token, Tokenizer::Comma|Tokenizer::CloseCurly))
@@ -533,12 +543,10 @@ QSharedPointer<ZEnum> Parser::parseEnum(TokenStream& stream, QSharedPointer<ZStr
     QSharedPointer<ZEnum> enm = QSharedPointer<ZEnum>(new ZEnum(nullptr));
     parsedTokens.append(ParserToken(enumName, ParserToken::TypeName, enm, parentsPrefix+e_enumName));
     enm->identifier = e_enumName;
-    enm->values = e_values;
-    // this is so that destructor works correctly
-    for (auto& e : e_values)
+    for (QSharedPointer<ZConstant> konst : e_values)
     {
-        e.second->parent = enm;
-        enm->children.append(e.second);
+        konst->parent = enm;
+        enm->children.append(konst);
     }
     enm->isValid = true;
     return enm;

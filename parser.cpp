@@ -338,10 +338,17 @@ QSharedPointer<ZTreeNode> Parser::resolveSymbol(QString name, QSharedPointer<ZTr
         }
 
         // look for local variable definition in the block
+        // also look for constants
         for (QSharedPointer<ZTreeNode> node : p->children)
         {
-            if (node->type() == ZTreeNode::LocalVariable && !node->identifier.compare(name, Qt::CaseInsensitive))
-                return node; // found local variable in block
+            if (p->type() == ZTreeNode::CodeBlock)
+            {
+                if (node->type() == ZTreeNode::LocalVariable && !node->identifier.compare(name, Qt::CaseInsensitive))
+                    return node; // found local variable in block
+            }
+
+            if (node->type() == ZTreeNode::Constant && !node->identifier.compare(name, Qt::CaseInsensitive))
+                return node;
         }
 
         p = p->parent;

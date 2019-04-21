@@ -490,8 +490,8 @@ public:
     virtual NodeType type() { return Enum; }
 
     QString version;
-    QList< QPair<QString, QSharedPointer<ZExpression>> > values;
     int lineNumber;
+    // children = ZConstant
 };
 
 struct ParserToken
