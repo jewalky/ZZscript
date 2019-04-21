@@ -48,7 +48,6 @@ ZTreeNode::~ZTreeNode()
     // not needed anymore
 }
 
-static void dumpType(ZStruct*, int);
 bool Parser::parse()
 {
     parsedTokens.clear();

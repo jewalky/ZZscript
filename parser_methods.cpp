@@ -73,7 +73,7 @@ QSharedPointer<ZForCycle> Parser::parseForCycle(TokenStream& stream, QSharedPoin
     Tokenizer::Token token;
     if (!stream.expectToken(token, Tokenizer::OpenParen))
     {
-        qDebug("parseForCycle: unexpected %s, expected open parenthesis at line %d", token.line);
+        qDebug("parseForCycle: unexpected %s, expected open parenthesis at line %d", token.toCString(), token.line);
         return nullptr;
     }
     parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
@@ -179,7 +179,7 @@ QList<QSharedPointer<ZTreeNode>> Parser::parseStatement(TokenStream& stream, QSh
                 QSharedPointer<ZExpression> expr = parseExpression(stream, Tokenizer::Comma|stopAtAnyOf);
                 if (!expr)
                 {
-                    qDebug("parseStatement: expected valid assignment expression at line %d", token.toCString(), token.line);
+                    qDebug("parseStatement: expected valid assignment expression at line %d", token.line);
                     return empty;
                 }
                 highlightExpression(expr, parent, context);
@@ -333,7 +333,6 @@ QList<QSharedPointer<ZTreeNode>> Parser::parseStatement(TokenStream& stream, QSh
                     if (!stream.expectToken(token, Tokenizer::Identifier))
                     {
                         qDebug("parseStatement: unexpected %s, expected variable name at line %d", token.toCString(), token.line);
-                        for (ZCompoundType& type : types) type.destroy();
                         return empty;
                     }
                     Tokenizer::Token identifierToken = token;
@@ -348,8 +347,7 @@ QList<QSharedPointer<ZTreeNode>> Parser::parseStatement(TokenStream& stream, QSh
                         expr = parseExpression(stream, Tokenizer::Comma|Tokenizer::Semicolon);
                         if (!expr)
                         {
-                            qDebug("parseStatement: expected valid assignment expression at line %d", token.toCString(), token.line);
-                            for (ZCompoundType& type : types) type.destroy();
+                            qDebug("parseStatement: expected valid assignment expression at line %d", token.line);
                             return empty;
                         }
                         highlightExpression(expr, parent, context);
@@ -366,7 +364,6 @@ QList<QSharedPointer<ZTreeNode>> Parser::parseStatement(TokenStream& stream, QSh
                             if (!consumeTokens(stream, subTokens, Tokenizer::CloseSquare))
                             {
                                 qDebug("parseStatement: unexpected end of stream while reading array expression at line %d", token.line);
-                                for (ZCompoundType& type : types) type.destroy();
                                 return empty;
                             }
                             //
@@ -375,7 +372,6 @@ QList<QSharedPointer<ZTreeNode>> Parser::parseStatement(TokenStream& stream, QSh
                             if (!stream.expectToken(token, Tokenizer::CloseSquare))
                             {
                                 qDebug("parseStatement: unexpected %s, expected closing square while reading array expression at line %d", token.toCString(), token.line);
-                                for (ZCompoundType& type : types) type.destroy();
                                 return empty;
                             }
                             parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
@@ -385,7 +381,6 @@ QList<QSharedPointer<ZTreeNode>> Parser::parseStatement(TokenStream& stream, QSh
                             if (!expr)
                             {
                                 qDebug("parseStatement: expected valid expression while reading array expression at line %d", token.line);
-                                for (ZCompoundType& type : types) type.destroy();
                                 return empty;
                             }
                             highlightExpression(expr, parent, context);
@@ -417,7 +412,6 @@ QList<QSharedPointer<ZTreeNode>> Parser::parseStatement(TokenStream& stream, QSh
                     if (!stream.expectToken(token, Tokenizer::Comma|Tokenizer::Semicolon))
                     {
                         qDebug("parseStatement: unexpected %s, expected next variable or semicolon at line %d", token.toCString(), token.line);
-                        for (ZCompoundType& type : types) type.destroy();
                         return empty;
                     }
 
@@ -446,7 +440,7 @@ QSharedPointer<ZCondition> Parser::parseCondition(TokenStream& stream, QSharedPo
     Tokenizer::Token token;
     if (!stream.expectToken(token, Tokenizer::OpenParen))
     {
-        qDebug("parseCondition: unexpected %s, expected open parenthesis at line %d", token.line);
+        qDebug("parseCondition: unexpected %s, expected open parenthesis at line %d", token.toCString(), token.line);
         return nullptr;
     }
     parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
@@ -464,7 +458,7 @@ QSharedPointer<ZCondition> Parser::parseCondition(TokenStream& stream, QSharedPo
     skipWhitespace(stream, true);
     if (!stream.expectToken(token, Tokenizer::CloseParen))
     {
-        qDebug("parseCondition: unexpected %s, expected close parenthesis at line %d", token.line);
+        qDebug("parseCondition: unexpected %s, expected close parenthesis at line %d", token.toCString(),token.line);
         return nullptr;
     }
     parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));

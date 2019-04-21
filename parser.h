@@ -139,11 +139,6 @@ struct ZCompoundType
         reference = nullptr;
     }
 
-    void destroy()
-    {
-        // not needed anymore
-    }
-
     bool isSystem()
     {
         return (reference && reference->type() == ZTreeNode::SystemType);
@@ -157,11 +152,6 @@ public:
 
     ZField(QSharedPointer<ZTreeNode> p) : ZTreeNode(p) {}
     virtual NodeType type() { return Field; }
-
-    virtual ~ZField()
-    {
-        fieldType.destroy();
-    }
 
     ZCompoundType fieldType;
     QList<QString> flags;
@@ -179,11 +169,6 @@ public:
 
     ZLocalVariable(QSharedPointer<ZTreeNode> p) : ZTreeNode(p) {}
     virtual NodeType type() { return LocalVariable; }
-
-    virtual ~ZLocalVariable()
-    {
-        varType.destroy();
-    }
 
     bool hasType; // false if "let"
     ZCompoundType varType;
