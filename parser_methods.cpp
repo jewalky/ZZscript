@@ -22,7 +22,7 @@ bool Parser::parseObjectMethods(QSharedPointer<ZClass> cls, QSharedPointer<ZStru
         // parse method
         QSharedPointer<ZMethod> method = node.dynamicCast<ZMethod>();
         TokenStream stream(method->tokens);
-        QSharedPointer<ZCodeBlock> rootBlock = parseCodeBlock(stream, nullptr, struc);
+        QSharedPointer<ZCodeBlock> rootBlock = parseCodeBlock(stream, method, struc);
         if (!rootBlock)
         {
             qDebug("parseObjectMethods: failed to parse '%s'", method->identifier.toUtf8().data());

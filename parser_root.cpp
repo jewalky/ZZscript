@@ -493,8 +493,9 @@ QSharedPointer<ZEnum> Parser::parseEnum(TokenStream& stream, QSharedPointer<ZStr
             return nullptr;
         }
 
+        bool lastEnum = false;
         if (token.type == Tokenizer::CloseCurly)
-            break; // done, valid enum
+            lastEnum = true;
 
         parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
         if (token.type == Tokenizer::OpAssign)
@@ -530,6 +531,16 @@ QSharedPointer<ZEnum> Parser::parseEnum(TokenStream& stream, QSharedPointer<ZStr
 
             parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
         }
+        else
+        {
+            QSharedPointer<ZConstant> konst = QSharedPointer<ZConstant>(new ZConstant(nullptr));
+            konst->identifier = enum_id;
+            konst->lineNumber = lineNo;
+            e_values.append(konst);
+        }
+
+        if (lastEnum)
+            break;
     }
 
     parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));

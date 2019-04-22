@@ -1194,6 +1194,19 @@ QSharedPointer<ZExpression> Parser::parseExpression(TokenStream& stream, quint64
             // read tokens until call expression ends
             while (true)
             {
+                // check for argument name, it should take the form of <identifier> <colon>
+                int cpos = stream.position();
+                QString argNamed = "";
+                skipWhitespace(stream, true);
+                if (stream.expectToken(token, Tokenizer::Identifier))
+                {
+                    argNamed = token.value;
+                    skipWhitespace(stream, true); // ?
+                    if (!stream.expectToken(token, Tokenizer::Colon))
+                        stream.setPosition(cpos);
+                    specTokens.append(token);
+                }
+                else stream.setPosition(cpos);
                 // read in expression
                 QList<Tokenizer::Token> exprTokens;
                 if (!consumeTokens(stream, exprTokens, Tokenizer::CloseParen|Tokenizer::Comma))
@@ -1217,6 +1230,8 @@ QSharedPointer<ZExpression> Parser::parseExpression(TokenStream& stream, quint64
                 QSharedPointer<ZExpression> subexpr = parseExpression(exprStream, 0);
                 if ((!subexpr && nonwhitespace) || (token.type != Tokenizer::CloseParen && token.type != Tokenizer::Comma))
                     goto fail;
+
+                if (subexpr) subexpr->identifier = argNamed;
 
                 specTokens.append(token);
 
@@ -1560,6 +1575,7 @@ void Parser::highlightExpression(QSharedPointer<ZExpression> expr, QSharedPointe
         QSharedPointer<ZTreeNode> lastfound = nullptr;
         bool fullfound = true;
         bool isstatic = false;
+        bool issuper = false;
         for (int i = 0; i < expr->leaves.size(); i++)
         {
             ZExpressionLeaf& leaf = expr->leaves[i];
@@ -1649,74 +1665,93 @@ void Parser::highlightExpression(QSharedPointer<ZExpression> expr, QSharedPointe
             else if (lastcls)
             {
                 // find field/method
-                for (QSharedPointer<ZTreeNode> node : lastcls->children)
+                while (true)
                 {
-                    if ((node->type() == ZTreeNode::Method || node->type() == ZTreeNode::Field || node->type() == ZTreeNode::Constant || node->type() == ZTreeNode::Struct) &&
-                            !node->identifier.compare(leaf.token.value, Qt::CaseInsensitive))
+                    bool typefound = false;
+                    for (QSharedPointer<ZTreeNode> node : lastcls->children)
                     {
-                        // check if static
-                        bool fisstatic = false;
-                        if (node->type() == ZTreeNode::Field)
+                        if ((node->type() == ZTreeNode::Method || node->type() == ZTreeNode::Field || node->type() == ZTreeNode::Constant || node->type() == ZTreeNode::Struct) &&
+                                !node->identifier.compare(leaf.token.value, Qt::CaseInsensitive))
                         {
-                            QSharedPointer<ZField> field = node.dynamicCast<ZField>();
-                            fisstatic = field->flags.contains("static");
+                            typefound = true; // to break out
+                            // check if static
+                            bool fisstatic = false;
+                            if (node->type() == ZTreeNode::Field)
+                            {
+                                QSharedPointer<ZField> field = node.dynamicCast<ZField>();
+                                fisstatic = field->flags.contains("static");
+                            }
+                            else if (node->type() == ZTreeNode::Method)
+                            {
+                                QSharedPointer<ZMethod> method = node.dynamicCast<ZMethod>();
+                                fisstatic = method->flags.contains("static");
+                            }
+                            else if (node->type() == ZTreeNode::Constant)
+                            {
+                                fisstatic = true; // but with this we cannot have typed constants
+                            }
+                            // matched
+                            // mark this field
+                            ParserToken::TokenType t = ParserToken::Field;
+                            if (node->type() == ZTreeNode::Method)
+                                t = ParserToken::Method;
+                            else if (node->type() == ZTreeNode::Constant)
+                                t = ParserToken::ConstantName;
+                            else if (node->type() == ZTreeNode::Struct)
+                                t = ParserToken::TypeName;
+                            parsedTokens.append(ParserToken(leaf.token, t, node, getFullFieldName(node)));
+                            // find type of this field
+                            // if it's a constant, there can be no type...
+                            if (node->type() == ZTreeNode::Constant)
+                            {
+                                lastcls = nullptr;
+                                // todo mark as constant
+                                continue;
+                            }
+                            // if it's a struct, use type directly. I'm not sure it works correctly
+                            if (isstatic && node->type() == ZTreeNode::Struct)
+                            {
+                                lastcls = node;
+                                parsedTokens.append(ParserToken(leaf.token, ParserToken::TypeName, node, leaf.token.value));
+                                continue;
+                            }
+                            // if it's a field, we have field type.
+                            ZCompoundType ft;
+                            if (node->type() == ZTreeNode::Method)
+                            {
+                                QSharedPointer<ZMethod> method = node.dynamicCast<ZMethod>();
+                                ft = method->returnTypes[0];
+                                // todo mark as method access
+                            }
+                            else if (node->type() == ZTreeNode::Field)
+                            {
+                                QSharedPointer<ZField> field = node.dynamicCast<ZField>();
+                                ft = field->fieldType;
+                                // todo mark as field access
+                            }
+                            if (fisstatic != isstatic && (!issuper || expr->leaves.size() > 2)) // if we need static and it's not static, then we cannot really use this
+                            {
+                                fullfound = false;
+                                break;
+                            }
+                            lastcls = ft.reference;
+                            lastfound = node;
                         }
-                        else if (node->type() == ZTreeNode::Method)
-                        {
-                            QSharedPointer<ZMethod> method = node.dynamicCast<ZMethod>();
-                            fisstatic = method->flags.contains("static");
-                        }
-                        else if (node->type() == ZTreeNode::Constant)
-                        {
-                            fisstatic = true; // but with this we cannot have typed constants
-                        }
-                        // matched
-                        // mark this field
-                        ParserToken::TokenType t = ParserToken::Field;
-                        if (node->type() == ZTreeNode::Method)
-                            t = ParserToken::Method;
-                        else if (node->type() == ZTreeNode::Constant)
-                            t = ParserToken::ConstantName;
-                        else if (node->type() == ZTreeNode::Struct)
-                            t = ParserToken::TypeName;
-                        parsedTokens.append(ParserToken(leaf.token, t, node, getFullFieldName(node)));
-                        // find type of this field
-                        // if it's a constant, there can be no type...
-                        if (node->type() == ZTreeNode::Constant)
-                        {
-                            lastcls = nullptr;
-                            // todo mark as constant
-                            continue;
-                        }
-                        // if it's a struct, use type directly. I'm not sure it works correctly
-                        if (isstatic && node->type() == ZTreeNode::Struct)
-                        {
-                            lastcls = node;
-                            parsedTokens.append(ParserToken(leaf.token, ParserToken::TypeName, node, leaf.token.value));
-                            continue;
-                        }
-                        // if it's a field, we have field type.
-                        ZCompoundType ft;
-                        if (node->type() == ZTreeNode::Method)
-                        {
-                            QSharedPointer<ZMethod> method = node.dynamicCast<ZMethod>();
-                            ft = method->returnTypes[0];
-                            // todo mark as method access
-                        }
-                        else if (node->type() == ZTreeNode::Field)
-                        {
-                            QSharedPointer<ZField> field = node.dynamicCast<ZField>();
-                            ft = field->fieldType;
-                            // todo mark as field access
-                        }
-                        if (fisstatic != isstatic) // if we need static and it's not static, then we cannot really use this
-                        {
-                            fullfound = false;
-                            break;
-                        }
-                        lastcls = ft.reference;
-                        lastfound = node;
                     }
+
+                    if (typefound)
+                        break;
+
+                    // if no such name was found, check if this is a class. if so, try parent class
+                    if (lastcls && lastcls->type() == ZTreeNode::Class)
+                    {
+                        QSharedPointer<ZClass> cls = lastcls.dynamicCast<ZClass>();
+                        QSharedPointer<ZClass> parentClass = cls->parentReference.toStrongRef();
+                        if (parentClass)
+                            lastcls = parentClass;
+                        else break;
+                    }
+                    else break;
                 }
             }
             else

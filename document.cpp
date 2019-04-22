@@ -390,7 +390,7 @@ void DocumentEditor::onTextChanged()
             {
                 case ParserToken::Comment:
                 {
-                    QBrush gray(QColor(127, 127, 127));
+                    QBrush gray(QColor(0x00, 0x80, 0x00));
                     format.setForeground(gray);
                     format.setFontItalic(true);
                     break;
@@ -398,7 +398,7 @@ void DocumentEditor::onTextChanged()
 
                 case ParserToken::Preprocessor:
                 {
-                    QBrush blue(QColor(0, 0, 255));
+                    QBrush blue(QColor(0x00, 0x00, 0x80));
                     format.setForeground(blue);
                     format.setFontWeight(QFont::Bold);
                     break;
@@ -406,21 +406,24 @@ void DocumentEditor::onTextChanged()
 
                 case ParserToken::Keyword:
                 {
-                    QBrush blue(QColor(0, 0, 255));
+                    QBrush blue(QColor(0x80, 0x80, 0x00));
                     format.setForeground(blue);
                     break;
                 }
 
                 case ParserToken::TypeName:
                 {
-                    QBrush green(QColor(0, 128, 255));
-                    format.setForeground(green);
+                    QBrush green(QColor(0x80, 0x00, 0x80));
+                    QBrush system(QColor(0x80, 0x80, 0x00));
+                    if (ptok.reference && ptok.reference->type() == ZTreeNode::SystemType)
+                        format.setForeground(system);
+                    else format.setForeground(green);
                     break;
                 }
 
                 case ParserToken::String:
                 {
-                    QBrush green(QColor(0, 128, 0));
+                    QBrush green(QColor(0x00, 0x80, 0x00));
                     format.setForeground(green);
                     format.setFontWeight(QFont::Bold);
                     break;
@@ -428,14 +431,14 @@ void DocumentEditor::onTextChanged()
 
                 case ParserToken::ConstantName:
                 {
-                    QBrush brown(QColor(128, 0, 0));
+                    QBrush brown(QColor(0x80, 0x00, 0x80));
                     format.setForeground(brown);
                     break;
                 }
 
                 case ParserToken::Number:
                 {
-                    QBrush pink(QColor(164, 0, 164));
+                    QBrush pink(QColor(0x00, 0x00, 0x80));
                     format.setForeground(pink);
                     break;
                 }
@@ -443,14 +446,30 @@ void DocumentEditor::onTextChanged()
                 case ParserToken::SpecialToken:
                 case ParserToken::Operator:
                 {
-                    QBrush red(QColor(255, 0, 0));
+                    QBrush red(QColor(0x00, 0x00, 0x00));
                     format.setForeground(red);
                     break;
                 }
 
+                case ParserToken::Argument:
                 case ParserToken::Local:
                 {
-                    format.setFontItalic(true);
+                    QBrush local(QColor(0x09, 0x2e, 0x64));
+                    format.setForeground(local);
+                    break;
+                }
+
+                case ParserToken::Field:
+                {
+                    QBrush field(QColor(0x80, 0x00, 0x00));
+                    format.setForeground(field);
+                    break;
+                }
+
+                case ParserToken::Method:
+                {
+                    QBrush method(QColor(0x00, 0x67, 0x7c));
+                    format.setForeground(method);
                     break;
                 }
 

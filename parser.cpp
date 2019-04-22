@@ -373,6 +373,14 @@ QSharedPointer<ZTreeNode> Parser::resolveSymbol(QString name, QSharedPointer<ZTr
                      node->type() == ZTreeNode::Method ||
                      node->type() == ZTreeNode::Constant) && !node->identifier.compare(name, Qt::CaseInsensitive))
                     return node;
+                if (node->type() == ZTreeNode::Enum)
+                {
+                    for (QSharedPointer<ZTreeNode> enode : node->children)
+                    {
+                        if (enode->type() == ZTreeNode::Constant && !enode->identifier.compare(name, Qt::CaseInsensitive))
+                            return enode;
+                    }
+                }
             }
             // if context is a class, it has parent
             if (context->type() == ZTreeNode::Class)
