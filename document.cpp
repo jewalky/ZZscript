@@ -40,6 +40,9 @@ void Document::parse()
     //           ...
     //     - constants[]
     if (parser && ownparser) delete parser;
+    parser = nullptr;
+    parsedTokens.clear();
+
     ownparser = true;
     parser = new Parser(tokens);
     parser->parse();
@@ -172,14 +175,18 @@ void Document::syncFromSource(ProjectFile* pf)
 {
     if (isnew) return;
 
-    if (pf)
+    if (parser && ownparser)
+        delete parser;
+
+    if (pf && pf->parser)
     {
-        if (parser && ownparser)
-            delete parser;
         contents = pf->contents;
         parser = pf->parser;
         ownparser = false;
-        parsedTokens = parser->parsedTokens;
+
+        if (parser) parsedTokens = parser->parsedTokens;
+        else parsedTokens.clear();
+
         if (tab)
         {
             DocumentEditor* editor = tab->getEditor();
@@ -189,8 +196,6 @@ void Document::syncFromSource(ProjectFile* pf)
         return;
     }
 
-    if (ownparser && parser)
-        delete parser;
     ownparser = true;
     parser = nullptr;
 
