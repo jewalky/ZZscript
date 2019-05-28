@@ -107,7 +107,7 @@ QSharedPointer<ZForCycle> Parser::parseForCycle(TokenStream& stream, QSharedPoin
 
     QList<QSharedPointer<ZTreeNode>> condition = parseStatement(stream, cycle, context, Stmt_Expression, Tokenizer::Semicolon);
     cycle->condition = condition.size() ? condition[0].dynamicCast<ZExpression>() : nullptr;
-    if (cycle->condition->type() != ZTreeNode::Expression)
+    if (cycle->condition && cycle->condition->type() != ZTreeNode::Expression)
     {
         qDebug("parseForCycle: expected valid expression for loop condition at line %d", token.line);
         return nullptr;
@@ -127,8 +127,11 @@ QSharedPointer<ZForCycle> Parser::parseForCycle(TokenStream& stream, QSharedPoin
                 return nullptr;
             }
         }
-        highlightExpression(expr, cycle, context);
-        cycle->step.append(expr);
+        else
+        {
+            highlightExpression(expr, cycle, context);
+            cycle->step.append(expr);
+        }
         skipWhitespace(stream, true);
         if (!stream.expectToken(token, Tokenizer::Comma|Tokenizer::CloseParen))
         {

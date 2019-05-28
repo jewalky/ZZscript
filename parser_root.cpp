@@ -15,6 +15,8 @@ bool Parser::parseRoot(TokenStream& stream)
             return true;
         }
 
+        token.makeLower();
+
         if (firstToken && token.type == Tokenizer::Identifier && token.value == "version")
         {
             skipWhitespace(stream, false);
@@ -115,6 +117,16 @@ bool Parser::parseRoot(TokenStream& stream)
                 enm->parent = root;
                 enm->lineNumber = token.line;
                 root->children.append(enm);
+            }
+            else if (token.value == "const")
+            {
+                parsedTokens.append(ParserToken(token, ParserToken::Keyword));
+                QSharedPointer<ZConstant> konst = parseConstant(stream, nullptr);
+                if (!konst)
+                    return false;
+                konst->parent = root;
+                konst->lineNumber = token.line;
+                root->children.append(konst);
             }
             else
             {
@@ -561,4 +573,45 @@ QSharedPointer<ZEnum> Parser::parseEnum(TokenStream& stream, QSharedPointer<ZStr
     }
     enm->isValid = true;
     return enm;
+}
+
+QSharedPointer<ZConstant> Parser::parseConstant(TokenStream& stream, QSharedPointer<ZStruct> struc)
+{
+    Tokenizer::Token token;
+    stream.setPosition(stream.position()+1);
+    skipWhitespace(stream, true);
+    if (!stream.expectToken(token, Tokenizer::Identifier))
+    {
+        qDebug("parseConstant: unexpected %s, expected const identifier at line %d", token.toCString(), token.line);
+        return nullptr;
+    }
+    QString c_identifier = token.value;
+    parsedTokens.append(ParserToken(token, ParserToken::ConstantName));
+    skipWhitespace(stream, true);
+    if (!stream.expectToken(token, Tokenizer::OpAssign))
+    {
+        qDebug("parseConstant: unexpected %s, expected assignment operator at line %d", token.toCString(), token.line);
+        return nullptr;
+    }
+    parsedTokens.append(ParserToken(token, ParserToken::Operator));
+    skipWhitespace(stream, true);
+    QSharedPointer<ZExpression> c_expression = parseExpression(stream, Tokenizer::Semicolon);
+    if (!c_expression)
+    {
+        qDebug("parseConstant: expected valid const expression at line %d", token.line);
+        return nullptr;
+    }
+    skipWhitespace(stream, true);
+    if (!stream.expectToken(token, Tokenizer::Semicolon))
+    {
+        qDebug("parseConstant: unexpected %s, expected semicolon at line %d", token.toCString(), token.line);
+        return nullptr;
+    }
+    parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
+    QSharedPointer<ZConstant> konst = QSharedPointer<ZConstant>(new ZConstant(struc));
+    konst->identifier = c_identifier;
+    c_expression->parent = konst;
+    konst->children.append(c_expression);
+    konst->isValid = true;
+    return konst;
 }

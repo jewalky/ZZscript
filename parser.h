@@ -588,6 +588,7 @@ private:
     QSharedPointer<ZClass> parseClass(TokenStream& stream, bool extend);
     QSharedPointer<ZStruct> parseStruct(TokenStream& stream, QSharedPointer<ZStruct> parent);
     QSharedPointer<ZEnum> parseEnum(TokenStream& stream, QSharedPointer<ZStruct> parent);
+    QSharedPointer<ZConstant> parseConstant(TokenStream& stream, QSharedPointer<ZStruct> parent);
 
     // this occurs in the class and struct body
     bool parseCompoundType(TokenStream& stream, ZCompoundType& type, QSharedPointer<ZStruct> context);

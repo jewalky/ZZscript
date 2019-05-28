@@ -201,17 +201,17 @@ void Parser::setTypeInformation(QList<QSharedPointer<ZTreeNode>> _types)
                 if (struc2->type() != ZTreeNode::Class)
                     continue;
                 QSharedPointer<ZClass> cls2 = struc2.dynamicCast<ZClass>();
-                if (cls2->identifier == cls->extendName)
+                if (!cls2->identifier.compare(cls->extendName, Qt::CaseInsensitive) && !cls2->extendReference)
                 {
                     cls->extendReference = cls2;
                     cls2->extensions.append(cls);
                 }
-                if (cls2->identifier == cls->replaceName)
+                if (!cls2->identifier.compare(cls->replaceName, Qt::CaseInsensitive))
                 {
                     cls->replaceReference = cls2;
                     cls2->replacedByReferences.append(cls);
                 }
-                if (cls2->identifier == cls->parentName)
+                if (!cls2->identifier.compare(cls->parentName, Qt::CaseInsensitive))
                 {
                     cls->parentReference = cls2;
                     cls2->childrenReferences.append(cls);
@@ -367,34 +367,74 @@ QSharedPointer<ZTreeNode> Parser::resolveSymbol(QString name, QSharedPointer<ZTr
     {
         while (context)
         {
-            for (QSharedPointer<ZTreeNode> node : context->children)
-            {
-                if ((node->type() == ZTreeNode::Field ||
-                     node->type() == ZTreeNode::Method ||
-                     node->type() == ZTreeNode::Constant) && !node->identifier.compare(name, Qt::CaseInsensitive))
-                    return node;
-                if (node->type() == ZTreeNode::Enum)
-                {
-                    for (QSharedPointer<ZTreeNode> enode : node->children)
-                    {
-                        if (enode->type() == ZTreeNode::Constant && !enode->identifier.compare(name, Qt::CaseInsensitive))
-                            return enode;
-                    }
-                }
-            }
-            // if context is a class, it has parent
+            QSharedPointer<ZClass> contextParent;
+            QList<QSharedPointer<ZTreeNode>> extensions;
+            extensions.append(context);
             if (context->type() == ZTreeNode::Class)
             {
+                extensions.clear();
                 QSharedPointer<ZClass> cls = context.dynamicCast<ZClass>();
-                if (!cls->parentReference)
-                    break;
-                context = cls->parentReference;
+                if (cls->extendReference)
+                    cls = cls->extendReference.toStrongRef();
+                extensions.append(cls);
+                if (cls->extensions.size())
+                {
+                    for (QWeakPointer<ZClass> extCls : cls->extensions)
+                    {
+                        if (extCls) extensions.append(extCls.toStrongRef());
+                    }
+                }
+                if (cls->parentReference)
+                    contextParent = cls->parentReference.toStrongRef();
             }
-            else break;
+            for (QSharedPointer<ZTreeNode> extendContext : extensions)
+            {
+                for (QSharedPointer<ZTreeNode> node : extendContext->children)
+                {
+                    if ((node->type() == ZTreeNode::Field ||
+                         node->type() == ZTreeNode::Method ||
+                         node->type() == ZTreeNode::Constant) && !node->identifier.compare(name, Qt::CaseInsensitive))
+                        return node;
+                    if (node->type() == ZTreeNode::Enum)
+                    {
+                        for (QSharedPointer<ZTreeNode> enode : node->children)
+                        {
+                            if (enode->type() == ZTreeNode::Constant && !enode->identifier.compare(name, Qt::CaseInsensitive))
+                                return enode;
+                        }
+                    }
+                }
+                // if context is a class, it has parent
+                if (contextParent)
+                {
+                    context = contextParent;
+                }
+                else
+                {
+                    context = nullptr;
+                    break;
+                }
+            }
         }
     }
 
-    // todo check global constants, but not yet
+    // check global enums and constants (kind of duplicates the check inside classes)
+    for (QSharedPointer<ZTreeNode> node : types)
+    {
+        if (node->type() == ZTreeNode::Enum)
+        {
+            for (QSharedPointer<ZTreeNode> enode : node->children)
+            {
+                if (enode->type() == ZTreeNode::Constant && !enode->identifier.compare(name, Qt::CaseInsensitive))
+                    return enode;
+            }
+        }
+        else if (node->type() == ZTreeNode::Constant)
+        {
+            if (!node->identifier.compare(name, Qt::CaseInsensitive))
+                return node;
+        }
+    }
 
     return nullptr;
 }
@@ -404,7 +444,7 @@ QList<QSharedPointer<ZTreeNode>> Parser::getOwnTypeInformation()
     QList<QSharedPointer<ZTreeNode>> types;
     for (QSharedPointer<ZTreeNode> node : root->children)
     {
-        if (node->type() == ZTreeNode::Class || node->type() == ZTreeNode::Struct || node->type() == ZTreeNode::Enum)
+        if (node->type() == ZTreeNode::Class || node->type() == ZTreeNode::Struct || node->type() == ZTreeNode::Enum || node->type() == ZTreeNode::Constant)
             types.append(node);
     }
     return types;

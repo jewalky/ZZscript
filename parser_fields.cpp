@@ -59,42 +59,11 @@ bool Parser::parseObjectFields(QSharedPointer<ZClass> cls, QSharedPointer<ZStruc
             parsedTokens.append(ParserToken(token, ParserToken::Keyword));
             // read in const value
             // const <name> = <expression>;
-            stream.setPosition(stream.position()+1);
-            skipWhitespace(stream, true);
-            if (!stream.expectToken(token, Tokenizer::Identifier))
-            {
-                qDebug("parseObjectFields: unexpected %s, expected const identifier at line %d", token.toCString(), token.line);
+            QSharedPointer<ZConstant> konst = parseConstant(stream, struc);
+            if (!konst)
                 return false;
-            }
-            QString c_identifier = token.value;
-            parsedTokens.append(ParserToken(token, ParserToken::ConstantName));
-            skipWhitespace(stream, true);
-            if (!stream.expectToken(token, Tokenizer::OpAssign))
-            {
-                qDebug("parseObjectFields: unexpected %s, expected assignment operator at line %d", token.toCString(), token.line);
-                return false;
-            }
-            parsedTokens.append(ParserToken(token, ParserToken::Operator));
-            skipWhitespace(stream, true);
-            QSharedPointer<ZExpression> c_expression = parseExpression(stream, Tokenizer::Semicolon);
-            if (!c_expression)
-            {
-                qDebug("parseObjectFields: expected valid const expression at line %d", token.line);
-                return false;
-            }
-            skipWhitespace(stream, true);
-            if (!stream.expectToken(token, Tokenizer::Semicolon))
-            {
-                qDebug("parseObjectFields: unexpected %s, expected semicolon at line %d", token.toCString(), token.line);
-                return false;
-            }
-            parsedTokens.append(ParserToken(token, ParserToken::SpecialToken));
-            QSharedPointer<ZConstant> konst = QSharedPointer<ZConstant>(new ZConstant(struc));
-            konst->identifier = c_identifier;
-            c_expression->parent = konst;
-            konst->children.append(c_expression);
+            konst->parent = struc;
             konst->lineNumber = lineno;
-            konst->isValid = true;
             struc->children.append(konst);
             continue;
         }
@@ -151,6 +120,50 @@ bool Parser::parseObjectFields(QSharedPointer<ZClass> cls, QSharedPointer<ZStruc
             prop->lineNumber = lineno;
             prop->isValid = true;
             struc->children.append(prop);
+            continue;
+        }
+        else if (token.value == "default") // no processing yet, just to make Doom classes work
+        {
+            parsedTokens.append(ParserToken(token, ParserToken::Keyword));
+            stream.setPosition(stream.position()+1);
+            // read in a block
+            skipWhitespace(stream, true);
+            if (!stream.expectToken(token, Tokenizer::OpenCurly))
+            {
+                qDebug("parseObjectFields: unexpected %s, expected opening curly brace at line %d", token.toCString(), token.line);
+                return false;
+            }
+            skipWhitespace(stream, true);
+            QList<Tokenizer::Token> _;
+            consumeTokens(stream, _, Tokenizer::CloseCurly);
+            skipWhitespace(stream, true);
+            if (!stream.expectToken(token, Tokenizer::CloseCurly))
+            {
+                qDebug("parseObjectFields: unexpected %s, expected closing curly brace at line %d", token.toCString(), token.line);
+                return false;
+            }
+            continue;
+        }
+        else if (token.value == "states")
+        {
+            parsedTokens.append(ParserToken(token, ParserToken::Keyword));
+            stream.setPosition(stream.position()+1);
+            // read in a block
+            skipWhitespace(stream, true);
+            if (!stream.expectToken(token, Tokenizer::OpenCurly))
+            {
+                qDebug("parseObjectFields: unexpected %s, expected opening curly brace at line %d", token.toCString(), token.line);
+                return false;
+            }
+            skipWhitespace(stream, true);
+            QList<Tokenizer::Token> _;
+            consumeTokens(stream, _, Tokenizer::CloseCurly);
+            skipWhitespace(stream, true);
+            if (!stream.expectToken(token, Tokenizer::CloseCurly))
+            {
+                qDebug("parseObjectFields: unexpected %s, expected closing curly brace at line %d", token.toCString(), token.line);
+                return false;
+            }
             continue;
         }
 
